@@ -55,7 +55,7 @@ function computeAccel(vel, omega, rho, wind) {
 
   // ── السحب (Drag) ──
   const Cd   = dynamicCd(rv, rho);
-  const drag = -0.5 * Cd * rho * PHYSICS.BALL_AREA * speed;
+  const drag = -0.5 * Cd * rho * PHYSICS.BALL_AREA * speed ** 2;
   const fDx  = speed > 0 ? (drag * rv.x) / speed : 0;
   const fDy  = speed > 0 ? (drag * rv.y) / speed : 0;
   const fDz  = speed > 0 ? (drag * rv.z) / speed : 0;

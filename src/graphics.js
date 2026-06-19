@@ -178,9 +178,8 @@ export class GraphicsSystem {
       if (distFromFairway < 22) return 0;
       let h = Math.sin(x * 0.03) * Math.cos(z * 0.04) * 3.5;
       h    += Math.sin(x * 0.07 + 1.2) * 1.5;
-      h    += Math.cos(z * 0.06) * 2.0;
       if (distFromFairway > 60) {
-        h += Math.max(0, Math.sin(x * 0.015) * 8 + Math.cos(z * 0.02) * 6);
+        h += Math.max(0, Math.sin(x * 0.015) * 8);
       }
       const blend = Math.min(1, (distFromFairway - 22) / 28);
       return h * blend;
@@ -207,8 +206,6 @@ export class GraphicsSystem {
       b.receiveShadow = true;
       this.scene.add(b);
     });
-
-    this.scene.add(this.ballGroup);
   }
 
   _flatPlane(w, h, color, roughness, px, py, pz) {
@@ -300,7 +297,6 @@ export class GraphicsSystem {
     this.scene.add(g);
   }
 
-  // ── الكرة ───────────────────────────────────────────────────
   // ── الكرة ───────────────────────────────────────────────────
   _buildBall() {
     const R = 0.02135 * 5;
