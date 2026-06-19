@@ -1,196 +1,240 @@
+// ============================================================
+// main.js — نقطة الدخول الرئيسية للمحاكاة
+// ============================================================
 import * as THREE from 'three';
 import { GraphicsSystem } from './graphics.js';
-import { solveRK4, handleCollisions } from './physics.js';
+import { PhysicsEngine, GROUND_TYPES, calcAirDensity } from './physics.js';
 
-const graphics = new GraphicsSystem();
+// ── واجهة المستخدم ──────────────────────────────────────────
+const ui = {
+  v0:          document.getElementById('v0'),
+  theta:       document.getElementById('theta'),
+  phi:         document.getElementById('phi'),
+  backspin:    document.getElementById('backspin'),
+  sidespin:    document.getElementById('sidespin'),
+  temperature: document.getElementById('temperature'),
+  altitude:    document.getElementById('altitude'),
+  windX:       document.getElementById('windX'),
+  groundType:  document.getElementById('groundType'),
+  launchBtn:   document.getElementById('launch-btn'),
+  resetBtn:    document.getElementById('reset-btn'),
+  camFree:     document.getElementById('cam-free'),
+  camFollow:   document.getElementById('cam-follow'),
+  camLanding:  document.getElementById('cam-landing'),
+  // HUD
+  dashAlt:     document.getElementById('dash-alt'),
+  dashVel:     document.getElementById('dash-vel'),
+  dashDist:    document.getElementById('dash-dist'),
+  dashSpin:    document.getElementById('dash-spin'),
+  dashStatus:  document.getElementById('dash-status'),
+  // نتائج
+  statsPanel:  document.getElementById('stats-panel'),
+  statDist:    document.getElementById('stat-dist'),
+  statMaxH:    document.getElementById('stat-maxh'),
+  statApex:    document.getElementById('stat-apex'),
+  statTime:    document.getElementById('stat-time'),
+  statHole:    document.getElementById('stat-hole'),
+  // نوع الأرض
+  groundLabel: document.getElementById('ground-label'),
+  groundDesc:  document.getElementById('ground-desc'),
+};
 
-// متغيرات تتبع الحركة الفيزيائية
-let pos = { x: 0, y: 0, z: 0 };
-let vel = { x: 0, y: 0, z: 0 };
-let omega = { x: 0, y: 0, z: 0 };
-let isFlying = false;
-let timeElapsed = 0;
+// ── وصف أنواع الأرض ─────────────────────────────────────────
+const GROUND_INFO = {
+  green:   { label: '🟢 أخضر — Green',   color: '#4ecb71', desc: 'عشب الحفرة مقصوص جداً. الكرة تتدحرج بعيداً وبناعم.' },
+  fairway: { label: '🌿 ممر — Fairway',  color: '#6fcf8a', desc: 'المسار الرئيسي للضربة. ارتداد ودحرجة طبيعية.' },
+  rough:   { label: '🌾 خشن — Rough',    color: '#b5cc55', desc: 'عشب طويل. يمتص الكرة ويقلل الـ Backspin (The Flier).' },
+  hardpan: { label: '🪨 صلب — Hardpan',  color: '#d4aa60', desc: 'أرض جافة. الكرة ترتد عالياً وتمشي مسافة طويلة.' },
+};
 
-const h = 0.016; // فروق الخطوة الزمنية dTime
-
-// ربط عناصر واجهة العدادات الرقمية
-const dashAlt = document.getElementById('dash-alt');
-const dashVel = document.getElementById('dash-vel');
-const dashDist = document.getElementById('dash-dist');
-const dashStatus = document.getElementById('dash-status');
-
-// --- إعداد وهندسة المخطط البياني (Chart.js) ---
+// ── Chart.js ────────────────────────────────────────────────
 let chartInstance = null;
-let chartLabels = [];
-let chartAltData = [];
-let chartVelData = [];
+let chartLabels   = [];
+let chartAltData  = [];
+let chartVelData  = [];
 
 function initChart() {
-    const ctx = document.getElementById('physicsChart').getContext('2d');
-    
-    // تدمير أي مخطط قديم لتجنب التداخل والتكرار عند إعادة الإطلاق
-    if (chartInstance) chartInstance.destroy();
-
-    chartLabels = [0];
-    chartAltData = [0];
-    chartVelData = [0];
-
-    chartInstance = new Chart(ctx, {
-        type: 'line',
-        data: {
-            labels: chartLabels,
-            datasets: [
-                {
-                    label: 'الارتفاع (متر)',
-                    data: chartAltData,
-                    borderColor: '#ffaa00',
-                    backgroundColor: 'transparent',
-                    yAxisID: 'y-alt',
-                    borderWidth: 2,
-                    pointRadius: 0 // إلغاء النقاط لتسريع المعالجة والرسم
-                },
-                {
-                    label: 'السرعة اللحظية (م/ث)',
-                    data: chartVelData,
-                    borderColor: '#00ffcc',
-                    backgroundColor: 'transparent',
-                    yAxisID: 'y-vel',
-                    borderWidth: 2,
-                    pointRadius: 0
-                }
-            ]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            scales: {
-                x: { title: { display: true, text: 'الزمن (ثانية)', font: { size: 10 } } },
-                'y-alt': { type: 'linear', position: 'right', title: { display: true, text: 'الارتفاع', color: '#ffaa00' } },
-                'y-vel': { type: 'linear', position: 'left', title: { display: true, text: 'السرعة', color: '#00ffcc' } }
-            },
-            plugins: { legend: { labels: { boxWidth: 12, font: { size: 10 } } } }
-        }
-    });
+  const ctx = document.getElementById('physicsChart').getContext('2d');
+  if (chartInstance) chartInstance.destroy();
+  chartLabels  = [0];
+  chartAltData = [0];
+  chartVelData = [0];
+  chartInstance = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: chartLabels,
+      datasets: [
+        { label: 'الارتفاع (م)',      data: chartAltData, borderColor: '#ffaa00', backgroundColor: 'rgba(255,170,0,0.08)',
+          yAxisID: 'y-alt', borderWidth: 2, pointRadius: 0, fill: true },
+        { label: 'السرعة (م/ث)',      data: chartVelData, borderColor: '#00ffcc', backgroundColor: 'rgba(0,255,200,0.06)',
+          yAxisID: 'y-vel', borderWidth: 2, pointRadius: 0, fill: true },
+      ],
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false, animation: false,
+      scales: {
+        x:       { title: { display: true, text: 'الزمن (ث)', font: { size: 10 } }, ticks: { maxTicksLimit: 8 } },
+        'y-alt': { type: 'linear', position: 'right',  title: { display: true, text: 'الارتفاع', color: '#ffaa00', font: { size: 10 } }, grid: { color: 'rgba(255,170,0,0.08)' } },
+        'y-vel': { type: 'linear', position: 'left',   title: { display: true, text: 'السرعة',   color: '#00ffcc', font: { size: 10 } }, grid: { color: 'rgba(0,255,200,0.06)' } },
+      },
+      plugins: { legend: { labels: { boxWidth: 10, font: { size: 10 } } } },
+    },
+  });
 }
 
-// البدء بتجهيز المخطط البياني لأول مرة عند فتح الصفحة
-initChart();
+// ── الحالة العامة ────────────────────────────────────────────
+const gfx     = new GraphicsSystem();
+let   engine  = null;
+let   running = false;
+let   frameCount = 0;
 
-// زر الإطلاق 🚀
-document.getElementById('launch-btn').addEventListener('click', () => {
-    if (isFlying) return;
+// ── تحديث HUD ───────────────────────────────────────────────
+function updateHUD(state) {
+  const speed = Math.hypot(state.vel.x, state.vel.y, state.vel.z);
+  const spin  = Math.hypot(state.omega.x, state.omega.y, state.omega.z);
+  ui.dashAlt.textContent  = state.pos.z.toFixed(2);
+  ui.dashVel.textContent  = speed.toFixed(2);
+  ui.dashDist.textContent = Math.hypot(state.pos.x, state.pos.y).toFixed(2);
+  ui.dashSpin.textContent = (spin / (2 * Math.PI) * 60).toFixed(0);  // rpm
+  return speed;
+}
 
-    const v0 = parseFloat(document.getElementById('v0').value);
-    const thetaRad = THREE.MathUtils.degToRad(parseFloat(document.getElementById('theta').value));
-    const phiRad = THREE.MathUtils.degToRad(parseFloat(document.getElementById('phi').value));
-    const rpmBack = parseFloat(document.getElementById('omegaBack').value);
-    const rpmSide = parseFloat(document.getElementById('omegaSide').value);
+// ── تحديث نوع الأرض في الواجهة ──────────────────────────────
+function updateGroundUI(type) {
+  const info = GROUND_INFO[type] ?? GROUND_INFO.fairway;
+  ui.groundLabel.textContent = info.label;
+  ui.groundLabel.style.color = info.color;
+  ui.groundDesc.textContent  = info.desc;
+}
 
-    // تصفير المواقع والمتغيرات الزمنية والمخططات
-    pos = { x: 0, y: 0, z: 0 };
-    timeElapsed = 0;
-    graphics.clearTrajectory();
-    initChart(); 
+// ── إطلاق المحاكاة ───────────────────────────────────────────
+ui.launchBtn.addEventListener('click', () => {
+  if (running) return;
 
-    // ربط المحاور الفيزيائية (التقرير: Z للأعلى | Three.js: Y للأعلى)
-    vel.x = v0 * Math.cos(thetaRad) * Math.cos(phiRad);
-    vel.y = v0 * Math.cos(thetaRad) * Math.sin(phiRad);
-    vel.z = v0 * Math.sin(thetaRad);
+  const params = {
+    v0:          parseFloat(ui.v0.value),
+    thetaDeg:    parseFloat(ui.theta.value),
+    phiDeg:      parseFloat(ui.phi.value),
+    backspinRPM: parseFloat(ui.backspin.value),
+    sidespinRPM: parseFloat(ui.sidespin.value),
+    temperature: parseFloat(ui.temperature.value),
+    altitude:    parseFloat(ui.altitude.value),
+    windX:       parseFloat(ui.windX.value),
+    windY:       0,
+    groundType:  ui.groundType.value,
+  };
 
-    omega.x = 0;
-    omega.y = -(rpmBack * 2 * Math.PI) / 60; // دوران خلفي سلبي لرفع ماغنوس
-    omega.z = (rpmSide * 2 * Math.PI) / 60;
+  engine = new PhysicsEngine(params);
+  running = true;
+  frameCount = 0;
 
-    isFlying = true;
-    dashStatus.textContent = "في الهواء 🏌️‍♂️";
-    dashStatus.style.color = "#ffaa00";
-    console.log("انطلقت المحاكاة بالشروط الابتدائية المعطاة.");
+  gfx.clearTrajectory();
+  initChart();
+
+  ui.statsPanel.style.display = 'none';
+  ui.dashStatus.textContent   = '🏌️ في الهواء';
+  ui.dashStatus.style.color   = '#ffaa00';
+
+  updateGroundUI(params.groundType);
 });
 
-// زر إعادة التعيين 🔄
-document.getElementById('reset-btn').addEventListener('click', () => {
-    isFlying = false;
-    pos = { x: 0, y: 0, z: 0 };
-    vel = { x: 0, y: 0, z: 0 };
-    omega = { x: 0, y: 0, z: 0 };
-    timeElapsed = 0;
-    
-    graphics.clearTrajectory();
-    graphics.ballGroup.position.set(0, 0, 0);
-    if(graphics.ballMesh) graphics.ballMesh.rotation.set(0,0,0);
-    
-    graphics.camera.position.set(-25, 12, 35);
-    graphics.controls.target.set(0,0,0);
-
-    dashAlt.textContent = "0.00";
-    dashVel.textContent = "0.00";
-    dashDist.textContent = "0.00";
-    dashStatus.textContent = "جاهزة";
-    dashStatus.style.color = "#ffaa00";
-    initChart();
+// ── إعادة التعيين ────────────────────────────────────────────
+ui.resetBtn.addEventListener('click', () => {
+  running = false;
+  engine  = null;
+  gfx.resetBall();
+  initChart();
+  ui.dashAlt.textContent  = '0.00';
+  ui.dashVel.textContent  = '0.00';
+  ui.dashDist.textContent = '0.00';
+  ui.dashSpin.textContent = '0';
+  ui.dashStatus.textContent = 'جاهزة';
+  ui.dashStatus.style.color = '#ffaa00';
+  ui.statsPanel.style.display = 'none';
+  updateGroundUI(ui.groundType.value);
 });
 
-// حلقة التحريك والرسم الرئيسي المستمر
+// ── أزرار الكاميرا ───────────────────────────────────────────
+[ui.camFree, ui.camFollow, ui.camLanding].forEach(btn => {
+  if (!btn) return;
+  btn.addEventListener('click', () => {
+    const mode = btn.dataset.mode;
+    gfx.cameraMode = mode;
+    [ui.camFree, ui.camFollow, ui.camLanding].forEach(b => {
+      if (b) b.classList.toggle('active', b.dataset.mode === mode);
+    });
+  });
+});
+
+// ── مزامنة نوع الأرض مع الواجهة ─────────────────────────────
+ui.groundType.addEventListener('change', () => {
+  updateGroundUI(ui.groundType.value);
+});
+
+// ── حلقة التحريك الرئيسية ───────────────────────────────────
+let lastTime = performance.now();
+
 function animate() {
-    requestAnimationFrame(animate);
+  requestAnimationFrame(animate);
 
-    // قمنا بوضع كود التحديث والحسابات الرياضية داخل هذا الشرط الصارم لضمان عدم حدوث تصفير للقيم عند التوقف الثابت للكرة
-    if (isFlying) {
-        // 1. معالجة الخطوة الزمنية الفيزيائية لحلال المعادلات والتصادمات
-        solveRK4(pos, vel, omega, h);
-        handleCollisions(pos, vel, omega);
-        timeElapsed += h;
+  const now   = performance.now();
+  const delta = Math.min((now - lastTime) / 1000, 0.05);
+  lastTime    = now;
 
-        // 2. تحديث وتوصيل الإحداثيات البصرية ثلاثية الأبعاد
-        const visualPos = new THREE.Vector3(pos.x, pos.z, -pos.y);
-        graphics.ballGroup.position.copy(visualPos);
+  if (running && engine) {
+    engine.update(delta);
+    const state = engine.state;
 
-        // 3. تغذية خط المسار المنقط بالنقاط الآنية للحركة
-        graphics.appendTrajectoryPoint(visualPos.x, visualPos.y, visualPos.z);
+    gfx.updateBallPosition(state.pos);
+    gfx.updateCamera(state.pos);
 
-        // 4. دوران مجسم الكرة حول محاوره الدورانية الفعلية
-        if (graphics.ballMesh) {
-            graphics.ballMesh.rotation.x += omega.y * h;
-            graphics.ballMesh.rotation.y += omega.z * h;
-        }
+    const speed = updateHUD(state);
 
-        // 5. تفعيل الكاميرا التتبعية الديناميكية خلف الكرة
-        graphics.updateCameraFollow(visualPos);
-
-        // 6. حساب السرعة الكلية وتغذية العدادات الرقمية اللحظية
-        const currentSpeed = Math.sqrt(vel.x**2 + vel.y**2 + vel.z**2);
-        dashAlt.textContent = pos.z.toFixed(2);
-        dashVel.textContent = currentSpeed.toFixed(2);
-        dashDist.textContent = pos.x.toFixed(2);
-
-        // 7. تغذية المخطط البياني بالبيانات كل إطارين (لتوفير الأداء والسرعة)
-        if (Math.round(timeElapsed / h) % 2 === 0) {
-            chartLabels.push(timeElapsed.toFixed(2));
-            chartAltData.push(pos.z);
-            chartVelData.push(currentSpeed);
-            chartInstance.update('none'); // تحديث صامت سريع بدون أنيميشن مفرط
-        }
-
-        // تحديث مسمى الحالة الرقمية في الواجهة
-        if (pos.z === 0 && currentSpeed > 0.05) {
-            dashStatus.textContent = "تتدحرج على العشب 🌿";
-            dashStatus.style.color = "#52b788";
-        }
-
-        // الشرط الحاسم: عند التوقف التام، نثبت القيم النهائية فوراً ونمنع تصفيرها أو تداخلها
-        if (vel.x === 0 && vel.y === 0 && vel.z === 0) {
-            isFlying = false; // يخرج من كتلة الـ if الكبرى فتبقى جميع الأرقام ثابتة في الواجهة والمخطط
-            dashStatus.textContent = "مستقرة وناجحة 🎯";
-            dashStatus.style.color = "#00ffcc";
-            
-            // تحديث أخير وشامل للمخطط البياني لإظهار المنحنى الكامل ثابتاً ومكتملاً للجنة التحكيم
-            chartInstance.update();
-            console.log("تم التوقف وتثبيت القيم بنجاح. المسافة الكلية المحققة:", pos.x.toFixed(2), "متر");
-        }
+    // تحديث المسار كل إطارين
+    if (frameCount % 2 === 0) {
+      gfx.updateTrajectory(engine.trajectory);
     }
 
-    graphics.controls.update();
-    graphics.renderer.render(graphics.scene, graphics.camera);
+    // تحديث المخطط البياني كل 3 إطارات
+    if (frameCount % 3 === 0) {
+      chartLabels.push(engine.time.toFixed(2));
+      chartAltData.push(+state.pos.z.toFixed(3));
+      chartVelData.push(+speed.toFixed(3));
+      chartInstance.update('none');
+    }
+
+    // حالة الدحرجة
+    if (engine.phase === 'rolling') {
+      ui.dashStatus.textContent = '🌿 تتدحرج';
+      ui.dashStatus.style.color = '#52b788';
+    }
+
+    // توقف
+    if (engine.phase === 'stopped') {
+      running = false;
+      chartInstance.update();
+
+      const stats = engine.getStats();
+      ui.statDist.textContent  = stats.distance  + ' م';
+      ui.statMaxH.textContent  = stats.maxHeight + ' م';
+      ui.statApex.textContent  = stats.apexDist  + ' م';
+      ui.statTime.textContent  = stats.flightTime + ' ث';
+      ui.statHole.textContent  = stats.inHole ? '🏆 دخلت الجورة!' : '—';
+      ui.statsPanel.style.display = 'block';
+
+      ui.dashStatus.textContent = stats.inHole ? '🏆 في الجورة!' : '🎯 مستقرة';
+      ui.dashStatus.style.color = '#00ffcc';
+    }
+
+    frameCount++;
+  } else {
+    gfx.updateCamera({ x: 0, y: 0, z: 0 });
+  }
+
+  gfx.render();
 }
 
+// ── تهيئة أولية ─────────────────────────────────────────────
+initChart();
+updateGroundUI('fairway');
 animate();
