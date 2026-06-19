@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>محاكاة غولف احترافية - بيئة واقعية ومخططات بيانية</title>
+    <style>
+        body { margin: 0; overflow: hidden; font-family: sans-serif; user-select: none; background-color: #7ec0ee; }
+        #canvas-container { width: 100vw; height: 100vh; position: absolute; top:0; left:0; z-index: 1; }
+        
+        #ui-panel {
+            position: absolute; top: 10px; right: 10px;
+            background: rgba(10, 25, 20, 0.9); color: white;
+            padding: 15px; border-radius: 8px; width: 280px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.6); z-index: 10;
+            border: 1px solid #2d6a4f;
+        }
+        #dashboard {
+            position: absolute; top: 10px; left: 10px;
+            background: rgba(10, 10, 10, 0.85); color: #00ffcc;
+            padding: 15px; border-radius: 8px; font-family: monospace; font-size: 14px; z-index: 10;
+            border: 1px solid #444; width: 220px;
+        }
+        /* حاوية المخطط البياني */
+        #chart-container {
+            position: absolute; bottom: 10px; left: 10px;
+            width: 420px; height: 220px; background: rgba(255, 255, 255, 0.95);
+            padding: 10px; border-radius: 8px; z-index: 10;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.4);
+        }
+        .control-group { margin-bottom: 10px; }
+        .control-group label { display: block; font-size: 11px; margin-bottom: 2px; color: #bbb; }
+        .control-group input { width: 100%; padding: 6px; border-radius: 4px; border: 1px solid #333; background: #222; color: #fff; box-sizing: border-box; }
+        .btn-group { display: flex; gap: 10px; margin-top: 12px; }
+        button { flex: 1; padding: 10px; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; transition: 0.2s; }
+        #launch-btn { background: #2d6a4f; }
+        #launch-btn:hover { background: #40916c; }
+        #reset-btn { background: #a11d33; }
+        #reset-btn:hover { background: #b7094c; }
+    </style>
+    
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+            }
+        }
+    </script>
+</head>
+<body>
+    <div id="canvas-container"></div>
+
+    <div id="dashboard">
+        <h4 style="margin:0 0 8px 0; text-align:center; color:#fff;">البيانات اللحظية</h4>
+        <div>الارتفاع الحالي: <span id="dash-alt">0.00</span> م</div>
+        <div>السرعة اللحظية: <span id="dash-vel">0.00</span> م/ث</div>
+        <div>المسافة الأفقية: <span id="dash-dist">0.00</span> م</div>
+        <hr style="border-color: #333; margin: 8px 0;">
+        <div style="font-size:12px; color:#fff;">الحالة: <span id="dash-status" style="color: #ffaa00;">جاهزة</span></div>
+    </div>
+
+    <div id="chart-container">
+        <canvas id="physicsChart"></canvas>
+    </div>
+
+    <div id="ui-panel">
+        <h3 style="margin-top:0; text-align:center; color:#52b788; font-size:16px;">المعطيات الابتدائية للتقرير</h3>
+        <div class="control-group">
+            <label>سرعة الانطلاق الابتدائية V0 (m/s):</label>
+            <input type="number" id="v0" value="65">
+        </div>
+        <div class="control-group">
+            <label>زاوية الانطلاق العمودية θ (درجة):</label>
+            <input type="number" id="theta" value="13">
+        </div>
+        <div class="control-group">
+            <label>الانحراف الجانبي φ (درجة):</label>
+            <input type="number" id="phi" value="0">
+        </div>
+        <div class="control-group">
+            <label>الدوران الخلفي Backspin (rpm):</label>
+            <input type="number" id="omegaBack" value="2800">
+        </div>
+        <div class="control-group">
+            <label>الدوران الجانبي Sidespin (rpm):</label>
+            <input type="number" id="omegaSide" value="0">
+        </div>
+        <div class="btn-group">
+            <button id="launch-btn">إطلاق 🚀</button>
+            <button id="reset-btn">إعادة 🔄</button>
+        </div>
+    </div>
+
+    <script type="module" src="./src/main.js"></script>
+</body>
+</html>
