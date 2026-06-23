@@ -5,24 +5,22 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>محاكاة فيزيائية لكرة الغولف</title>
 
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
   <script type="importmap">
   {
     "imports": {
-      "three":          "https://unpkg.com/three@0.160.0/build/three.module.js",
-      "three/addons/":  "https://unpkg.com/three@0.160.0/examples/jsm/"
+      "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+      "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
     }
   }
   </script>
 
   <style>
-    /* ── reset ── */
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     body { background: #0a0f14; overflow: hidden; font-family: 'Segoe UI', Tahoma, sans-serif; user-select: none; }
 
-    #canvas-container { position: fixed; inset: 0; z-index: 1; }
+    #canvas-container { position: fixed; inset: 0; z-index: 1; background: #0a0f14; }
 
-    /* ══ لوحة الإدخال (يمين) ══ */
     #ui-panel {
       position: fixed; top: 12px; right: 12px; z-index: 10;
       width: 272px;
@@ -72,7 +70,6 @@
     #reset-btn  { background: linear-gradient(135deg,#7b1226,#a11d33); color: #fff; }
     #reset-btn:hover  { background: linear-gradient(135deg,#a11d33,#c72e47); }
 
-    /* ══ لوحة البيانات اللحظية (يسار) ══ */
     #hud {
       position: fixed; top: 12px; left: 12px; z-index: 10;
       width: 230px;
@@ -83,8 +80,10 @@
       box-shadow: 0 6px 24px rgba(0,0,0,0.6);
     }
     #hud h4 { color: #fff; font-size: 12px; margin-bottom: 8px; text-align: center; letter-spacing: .5px; }
-    .hud-row { display: flex; justify-content: space-between; align-items: center;
-               font-size: 12px; color: #aaa; margin-bottom: 5px; }
+    .hud-row { 
+      display: flex; justify-content: space-between; align-items: center;
+      font-size: 12px; color: #aaa; margin-bottom: 5px; 
+    }
     .hud-row .val { color: #00ffcc; font-weight: bold; font-family: monospace; font-size: 13px; }
 
     #dash-status-wrap {
@@ -93,7 +92,6 @@
     }
     #dash-status { font-weight: bold; font-size: 13px; color: #ffaa00; }
 
-    /* شرح نوع الأرض */
     #ground-info {
       margin-top: 10px; padding: 8px 10px;
       background: rgba(0,0,0,0.3); border-radius: 7px;
@@ -102,30 +100,68 @@
     #ground-label { font-size: 11px; font-weight: bold; margin-bottom: 3px; }
     #ground-desc  { font-size: 10px; color: #888; line-height: 1.5; }
 
-    /* أزرار الكاميرا */
+    /* ══ أزرار الكاميرا ══ */
     #cam-btns {
       position: fixed; bottom: 20px; left: 12px; z-index: 10;
-      display: flex; flex-direction: column; gap: 5px;
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+      background: rgba(0,0,0,0.6);
+      padding: 10px;
+      border-radius: 10px;
+      border: 1px solid #333;
     }
-    .cam-label { color: #666; font-size: 10px; letter-spacing: .8px; margin-bottom: 2px; }
-    .cam-group { display: flex; gap: 5px; }
+    .cam-label { 
+      color: #52b788; 
+      font-size: 11px; 
+      letter-spacing: .8px; 
+      margin-bottom: 4px;
+      text-align: center;
+    }
+    .cam-group { 
+      display: flex; 
+      gap: 5px; 
+      flex-wrap: wrap;
+      justify-content: center;
+    }
     .cam-btn {
-      flex: none; padding: 6px 12px; font-size: 11px;
-      background: rgba(0,0,0,0.7); border: 1px solid #333;
-      border-radius: 5px; color: #bbb; cursor: pointer; transition: .2s;
+      flex: none; 
+      padding: 8px 14px; 
+      font-size: 12px;
+      background: rgba(30,40,30,0.8); 
+      border: 1px solid #444;
+      border-radius: 6px; 
+      color: #bbb; 
+      cursor: pointer; 
+      transition: .2s;
+      min-width: 60px;
     }
-    .cam-btn:hover { background: rgba(60,80,60,0.8); border-color: #52b788; color: #fff; }
-    .cam-btn.active { background: #2d6a4f; border-color: #52b788; color: #fff; }
+    .cam-btn:hover { 
+      background: rgba(45,106,79,0.8); 
+      border-color: #52b788; 
+      color: #fff; 
+    }
+    .cam-btn.active { 
+      background: #2d6a4f; 
+      border-color: #52b788; 
+      color: #fff; 
+      box-shadow: 0 0 10px rgba(82,183,136,0.3);
+    }
+    .cam-hint {
+      color: #666;
+      font-size: 9px;
+      text-align: center;
+      margin-top: 3px;
+      letter-spacing: 0.5px;
+    }
 
-    /* تلميح التحكم */
     #hint {
-      position: fixed; bottom: 80px; left: 12px; z-index: 10;
+      position: fixed; bottom: 155px; left: 12px; z-index: 10;
       background: rgba(0,0,0,0.65); border: 1px solid #222;
       border-radius: 7px; padding: 7px 11px;
       font-size: 10px; color: #666; line-height: 1.7;
     }
 
-    /* ══ المخطط البياني ══ */
     #chart-container {
       position: fixed; bottom: 12px; left: 12px; z-index: 10;
       width: 400px; height: 170px;
@@ -136,7 +172,6 @@
       box-shadow: 0 4px 20px rgba(0,0,0,0.5);
     }
 
-    /* ══ لوحة النتائج ══ */
     #stats-panel {
       display: none;
       position: fixed; top: 50%; left: 50%; transform: translate(-50%,-50%);
@@ -144,7 +179,7 @@
       background: rgba(6, 8, 16, 0.96);
       border: 1px solid #2d6a4f;
       border-radius: 12px; padding: 22px 28px;
-      min-width: 280px; text-align: center;
+      min-width: 320px; text-align: center;
       box-shadow: 0 8px 40px rgba(0,0,0,0.8);
       backdrop-filter: blur(12px);
       animation: popIn .3s ease;
@@ -166,13 +201,24 @@
     #stats-panel .close-btn:hover { background: #40916c; }
     #stat-hole { color: #ffd700; font-weight: bold; font-size: 15px; display: block; margin-top: 4px; }
 
-    /* انيميشن */
     @keyframes popIn {
       from { transform: translate(-50%,-50%) scale(0.7); opacity: 0; }
       to   { transform: translate(-50%,-50%) scale(1);   opacity: 1; }
     }
     .pulse { animation: pulse 1.8s ease-in-out infinite; }
     @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.55} }
+
+    #info-bar {
+      position: fixed; bottom: 12px; right: 12px; z-index: 10;
+      background: rgba(6, 8, 16, 0.85);
+      border: 1px solid #1e3050;
+      border-radius: 8px;
+      padding: 8px 14px;
+      font-size: 11px;
+      color: #888;
+      backdrop-filter: blur(8px);
+    }
+    #info-bar span { color: #52b788; margin: 0 4px; }
   </style>
 </head>
 <body>
@@ -299,13 +345,17 @@
     <button class="cam-btn active" data-mode="free"    id="cam-free">🎮 حر</button>
     <button class="cam-btn"        data-mode="follow"  id="cam-follow">🏌️ تتبع</button>
     <button class="cam-btn"        data-mode="landing" id="cam-landing">🎯 هبوط</button>
+    <button class="cam-btn"        data-mode="top"     id="cam-top">🗺️ علوي</button>
+    <button class="cam-btn"        data-mode="player"  id="cam-player">👤 لاعب</button>
   </div>
+  <div class="cam-hint">⌨️ 1-حر | 2-تتبع | 3-هبوط | 4-علوي | 5-لاعب</div>
+  <div class="cam-hint">WASD+QE | Shift=سريع | عجلة=تقريب</div>
 </div>
 
 <!-- تلميح التحكم -->
 <div id="hint">
   🖱️ سحب: تدوير &nbsp;|&nbsp; عجلة: تقريب<br>
-  ⌨️ WASD: تحريك الكاميرا
+  ⌨️ WASD+QE: تحريك | Shift: سريع
 </div>
 
 <!-- ══ المخطط البياني ══ -->
@@ -319,11 +369,13 @@
   <div class="stat-row"><span>📏 المسافة الكلية</span>  <span class="sv" id="stat-dist">—</span></div>
   <div class="stat-row"><span>📈 أقصى ارتفاع</span>    <span class="sv" id="stat-maxh">—</span></div>
   <div class="stat-row"><span>🎯 مسافة القمة</span>    <span class="sv" id="stat-apex">—</span></div>
+  <div class="stat-row"><span>🛬 نقطة الهبوط</span>    <span class="sv" id="stat-landing">—</span></div>
   <div class="stat-row"><span>⏱️ زمن الرحلة</span>    <span class="sv" id="stat-time">—</span></div>
   <span id="stat-hole"></span>
   <br>
   <button class="close-btn" onclick="document.getElementById('stats-panel').style.display='none'">إغلاق</button>
 </div>
+
 
 <script type="module" src="./src/main.js"></script>
 </body>

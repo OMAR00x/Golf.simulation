@@ -40,11 +40,14 @@ function dynamicCd(vel, rho) {
   return 0.22;
 }
 
-// ── معامل الرفع من نسبة الدوران (بيانات تجريبية) ────────────
+// ── معامل الرفع من نسبة الدوران (بيانات تجريبية محسّنة) ─────
 function liftCoeff(spinRatio) {
   if (spinRatio < 0.05) return 0;
   if (spinRatio > 0.50) return 0.30;
-  return 0.60 * spinRatio;
+  // منحنى أكثر واقعية — ذروة عند ~0.25
+  const peak = 0.25;
+  if (spinRatio < peak) return 0.60 * spinRatio;
+  return 0.15 + 0.30 * Math.exp(-(spinRatio - peak) * 3);
 }
 
 // ── حساب القوى الكلية وإعادة التسارع ────────────────────────
@@ -60,20 +63,33 @@ function computeAccel(vel, omega, rho, wind) {
   const fDy  = speed > 0 ? (drag * rv.y) / speed : 0;
   const fDz  = speed > 0 ? (drag * rv.z) / speed : 0;
 
-  // ── قوة ماغنوس (Magnus / Lift) ──
+  // ── قوة ماغنوس (Magnus / Lift) محسّنة ──
   let fLx = 0, fLy = 0, fLz = 0;
   const wMag = Math.hypot(omega.x, omega.y, omega.z);
   if (wMag > 0.1 && speed > 0.01) {
     const spinRatio = (PHYSICS.BALL_RADIUS * wMag) / speed;
     const Cl        = liftCoeff(spinRatio);
-    const magnusK   = 0.5 * Cl * rho * PHYSICS.BALL_AREA * (speed / wMag);
-    // ω × v
+    
+    // معاملات منفصلة لكل نوع دوران
+    const bsRatio = Math.abs(omega.y) / wMag;
+    const ssRatio = Math.abs(omega.x) / wMag;
+    
+    // قوة الرفع العمودية (من backspin)
+    const liftMag = 0.5 * Cl * bsRatio * rho * PHYSICS.BALL_AREA * speed ** 2;
+    fLz += Math.sign(omega.y) * liftMag * 0.5; // backspin سالب → رفع للأعلى
+    
+    // قوة الانحناء الأفقي (من sidespin) — Hook/Slice
+    const sideMag = 0.5 * Cl * ssRatio * rho * PHYSICS.BALL_AREA * speed ** 2 * 0.7;
+    fLy += Math.sign(omega.x) * sideMag;
+    
+    // قوة ماغنوس العامة (ω × v) — للاتجاهات المتبقية
+    const magnusK = 0.5 * Cl * rho * PHYSICS.BALL_AREA * (speed / wMag) * 0.3;
     const cx = omega.y * rv.z - omega.z * rv.y;
     const cy = omega.z * rv.x - omega.x * rv.z;
     const cz = omega.x * rv.y - omega.y * rv.x;
-    fLx = magnusK * cx;
-    fLy = magnusK * cy;
-    fLz = magnusK * cz;
+    fLx += magnusK * cx;
+    fLy += magnusK * cy;
+    fLz += magnusK * cz;
   }
 
   // ── اضمحلال الدوران (Spin Decay) بالمعادلة الفيزيائية ──
@@ -136,51 +152,65 @@ export function rk4Step(state, dt, rho, wind) {
   };
 }
 
-// ── ارتداد الأرض — Impulse Model ─────────────────────────────
-export function handleBounce(state, eGround) {
+// ── ارتداد الأرض — Impulse Model محسّن ─────────────────────
+export function handleBounce(state, eGround, groundType) {
   const { vel, omega, pos } = state;
   const mu_d = 0.20;
   const vzB  = vel.z;
 
-  // الارتداد العمودي
-  const newVz = -eGround * vzB;
+  // الارتداد العمودي مع تخميد إضافي للسرعات العالية
+  const impactSpeed = Math.abs(vzB);
+  const eEffective = eGround * Math.max(0.5, 1 - impactSpeed * 0.02);
+  const newVz = -Math.max(0.1, eEffective) * vzB;
+
+  // فقدان الدوران حسب نوع السطح (الأرض تمتص الدوران)
+  const spinLossFactor = groundType === 'green' ? 0.75 : 
+                         groundType === 'fairway' ? 0.65 :
+                         groundType === 'rough' ? 0.90 : 0.55;
+  
+  const newOmegaX = omega.x * (1 - spinLossFactor * 0.3);
+  const newOmegaY = omega.y * (1 - spinLossFactor);
+  const newOmegaZ = omega.z * (1 - spinLossFactor * 0.3);
 
   // سرعة الانزلاق على السطح
   const vSlipX = vel.x - PHYSICS.BALL_RADIUS * omega.y;
-  const vSlipY = vel.y;
+  const vSlipY = vel.y + PHYSICS.BALL_RADIUS * omega.x; // تأثير sidespin أيضًا
   const vSlipM = Math.hypot(vSlipX, vSlipY);
 
   let newVx = vel.x, newVy = vel.y;
-  let newOmY = omega.y;
 
   if (vSlipM > 0.01) {
-    const imp  = mu_d * (1 + eGround) * Math.abs(vzB);
+    const imp  = mu_d * (1 + eEffective) * Math.abs(vzB);
     const fx   = -imp * (vSlipX / vSlipM);
     const fy   = -imp * (vSlipY / vSlipM);
     newVx     += fx;
     newVy     += fy;
-    newOmY    += (PHYSICS.BALL_RADIUS * (-fx)) / PHYSICS.INERTIA;
   }
 
   return {
     pos:   { ...pos, z: PHYSICS.BALL_RADIUS + 0.001 },
     vel:   { x: newVx, y: newVy, z: newVz },
-    omega: { ...omega, y: newOmY },
+    omega: { x: newOmegaX, y: newOmegaY, z: newOmegaZ },
   };
 }
 
-// ── تحديث الدحرجة (Velocity Verlet) ──────────────────────────
+// ── تحديث الدحرجة (Velocity Verlet) محسّن ──────────────────
 export function rollingStep(state, dt, mu_r) {
   const { pos, vel, omega } = state;
   const speed = Math.hypot(vel.x, vel.y);
 
-  // عتبة التوقف — أي سرعة أقل من 0.3 م/ث تتوقف فوراً
+  // عتبة التوقف
   if (speed < 0.3) {
     return { pos, vel: {x:0, y:0, z:0}, omega: {x:0, y:0, z:0} };
   }
 
-  // تباطؤ بفعل الاحتكاك التدحرجي: a = -μr·g
-  const decel  = mu_r * PHYSICS.GRAVITY;
+  // تأثير الـ backspin على الاحتكاك (check-up effect)
+  // backspin عالي = الكرة "تقفز" وتتوقف أسرع
+  const backspinMag = Math.abs(omega.y);
+  const backspinEffect = Math.min(2.0, backspinMag * PHYSICS.BALL_RADIUS / Math.max(speed, 1));
+  const effectiveMu = mu_r * (1 + backspinEffect * 0.8);
+  
+  const decel  = effectiveMu * PHYSICS.GRAVITY;
   const nx     = vel.x / speed;
   const ny     = vel.y / speed;
 
@@ -196,13 +226,18 @@ export function rollingStep(state, dt, mu_r) {
   const newPx = pos.x + (vel.x + newVx) * 0.5 * dt;
   const newPy = pos.y + (vel.y + newVy) * 0.5 * dt;
 
-  // اضمحلال الدوران بنسبة أسرع أثناء الدحرجة
+  // اضمحلال الدوران أثناء الدحرجة
   const spinDecay = Math.max(0, 1 - decel * dt / Math.max(speed, 0.1));
+  const rollSpinDecay = Math.max(0, 1 - mu_r * PHYSICS.GRAVITY * dt * 2);
 
   return {
     pos:   { x: newPx, y: newPy, z: PHYSICS.BALL_RADIUS },
     vel:   { x: newVx, y: newVy, z: 0 },
-    omega: { x: omega.x * spinDecay, y: omega.y * spinDecay, z: omega.z * spinDecay },
+    omega: { 
+      x: omega.x * spinDecay, 
+      y: omega.y * rollSpinDecay, 
+      z: omega.z * spinDecay 
+    },
   };
 }
 
@@ -233,6 +268,7 @@ export class PhysicsEngine {
     const gt        = GROUND_TYPES[params.groundType] ?? GROUND_TYPES.fairway;
     this.eGround    = gt.restitution;
     this.muRolling  = gt.rollingFriction;
+    this.groundType = params.groundType ?? 'fairway';
     this.state      = calcInitialState(params);
     this.trajectory = [{ ...this.state.pos }];
     this.time       = 0;
@@ -240,6 +276,7 @@ export class PhysicsEngine {
     this.inHole     = false;
     this.bounces    = 0;
     this.maxBounces = 6;
+    this.landingPoint = null;     // نقطة الهبوط المتوقعة
   }
 
   step(dt) {
@@ -251,8 +288,12 @@ export class PhysicsEngine {
 
       // وصل الأرض؟
       if (this.state.pos.z <= PHYSICS.BALL_RADIUS && this.bounces < this.maxBounces) {
-        this.state = handleBounce(this.state, this.eGround);
+        this.state = handleBounce(this.state, this.eGround, this.groundType);
         this.bounces++;
+        // تسجيل نقطة الهبوط الأولى
+        if (!this.landingPoint && this.bounces === 1) {
+          this.landingPoint = { ...this.state.pos };
+        }
         // إذا كانت السرعة العمودية صغيرة جداً بعد الارتداد → تدحرج
         if (Math.abs(this.state.vel.z) < 0.5) {
           this.state.pos.z  = PHYSICS.BALL_RADIUS;
@@ -263,6 +304,9 @@ export class PhysicsEngine {
         this.state.pos.z = PHYSICS.BALL_RADIUS;
         this.state.vel.z = 0;
         this.phase       = 'rolling';
+        if (!this.landingPoint) {
+          this.landingPoint = { ...this.state.pos };
+        }
       }
 
       if (this.time > PHYSICS.MAX_TIME) this.phase = 'stopped';
@@ -275,7 +319,7 @@ export class PhysicsEngine {
       }
     }
 
-    // تسجيل المسار (كل خطوة ثانية تقريباً لتوفير الذاكرة)
+    // تسجيل المسار
     if (this.trajectory.length < 8000) {
       this.trajectory.push({ ...this.state.pos });
     }
@@ -317,6 +361,8 @@ export class PhysicsEngine {
       apexDist:  apexDist.toFixed(1),
       flightTime:this.time.toFixed(2),
       inHole:    this.inHole,
+      landingX:  this.landingPoint ? this.landingPoint.x.toFixed(1) : null,
+      landingY:  this.landingPoint ? this.landingPoint.y.toFixed(1) : null,
     };
   }
 }
