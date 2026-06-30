@@ -3,6 +3,7 @@
 // ============================================================
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
 const HOLE_X = 170;
 
@@ -14,13 +15,25 @@ export class GraphicsSystem {
     this.ballGroup  = new THREE.Group();
     this.trajPts    = [];
     this.trajLine   = null;
-    this.cameraMode = 'free';
+    this.cameraMode = 'player';
     this.landingMarker = null;
     this.bounceParticles = [];
     this.teeGroup = null;
     this.flagGroup = null;
     this.birds = [];
     this.time = 0;
+    this.clubPivot = null;
+    this.loadedBallModel = null;
+    this.loadedTeeHeight = 0.14;
+    this.proceduralTeeBase = null;
+    this.proceduralTeeStand = null;
+    this.proceduralClubGroup = null;
+
+    // Swing animation state
+    this.clubState = 'idle'; // 'idle' | 'swinging'
+    this.swingTime = 0;
+    this.onImpact = null;
+    this.onSwingComplete = null;
 
     this._initRenderer();
     this._initLighting();
@@ -30,8 +43,10 @@ export class GraphicsSystem {
     this._buildTee();
     this._buildBall();
     this._buildTrajectoryLine();
+    this._buildAimLine();
     this._buildLandingMarker();
     this._buildWindIndicator();
+    this._loadModels();
 
     window.addEventListener('resize', () => this._onResize());
   }
@@ -58,7 +73,7 @@ export class GraphicsSystem {
     this.controls.target.set(35, 0, 0);
     this.controls.maxPolarAngle  = Math.PI / 2 - 0.05;
     this.controls.minDistance    = 3;
-    this.controls.maxDistance    = 400;
+    this.controls.maxDistance    = 3000;
 
     this._keys = {};
     window.addEventListener('keydown', e => { this._keys[e.key.toLowerCase()] = true;  });
@@ -77,12 +92,12 @@ export class GraphicsSystem {
     sun.castShadow              = true;
     sun.shadow.mapSize.width    = 4096;
     sun.shadow.mapSize.height   = 4096;
-    sun.shadow.camera.left      = -100;
-    sun.shadow.camera.right     = 300;
-    sun.shadow.camera.top       = 120;
-    sun.shadow.camera.bottom    = -80;
+    sun.shadow.camera.left      = -200;
+    sun.shadow.camera.right     = 600;
+    sun.shadow.camera.top       = 250;
+    sun.shadow.camera.bottom    = -250;
     sun.shadow.camera.near      = 1;
-    sun.shadow.camera.far       = 500;
+    sun.shadow.camera.far       = 1000;
     sun.shadow.bias             = -0.0003;
     this.scene.add(sun);
 
@@ -382,19 +397,20 @@ export class GraphicsSystem {
 
   // ── بناء الملعب ─────────────────────────────────────────────
   _buildCourse() {
-    // --- الأرض الخضراء الرئيسية (Rough) ---
-    const roughGeo = new THREE.PlaneGeometry(800, 600, 80, 60);
+    // --- Massive main rough terrain ---
+    const roughGeo = new THREE.PlaneGeometry(4000, 3000, 160, 120);
     const roughPos = roughGeo.attributes.position;
     for (let i = 0; i < roughPos.count; i++) {
       const x = roughPos.getX(i), z = roughPos.getY(i);
-      const onFairway = Math.abs(z) < 25;
+      const onFairway = Math.abs(z) < 40;
       let h = 0;
       if (!onFairway) {
-        h  = Math.sin(x * 0.02) * Math.cos(z * 0.025) * 4;
-        h += Math.sin(x * 0.05 + 2) * 1.8;
-        h += Math.cos(z * 0.03 + 1) * 2;
-        if (Math.abs(z) > 70) h += Math.max(0, Math.sin(x * 0.012) * 10);
-        const blend = Math.min(1, (Math.abs(z) - 25) / 35);
+        // Natural mountain terrain heights scaled proportionally (divided frequency by 5)
+        h  = Math.sin(x * 0.004) * Math.cos(z * 0.005) * 25;
+        h += Math.sin(x * 0.01 + 2) * 8;
+        h += Math.cos(z * 0.006 + 1) * 10;
+        if (Math.abs(z) > 200) h += Math.max(0, Math.sin(x * 0.0024) * 45);
+        const blend = Math.min(1, (Math.abs(z) - 40) / 75);
         h *= blend;
       }
       roughPos.setZ(i, h);
@@ -403,21 +419,21 @@ export class GraphicsSystem {
     const roughMesh = new THREE.Mesh(roughGeo,
       new THREE.MeshStandardMaterial({ color: 0x3d6b33, roughness: 0.95 }));
     roughMesh.rotation.x    = -Math.PI / 2;
-    roughMesh.position.set(HOLE_X / 2, 0, 0);
+    roughMesh.position.set(300, 0, 0); // centered at 300
     roughMesh.receiveShadow = true;
     this.scene.add(roughMesh);
 
-    // --- الممر (Fairway) ---
-    const fairway = this._flatPlane(HOLE_X + 60, 32, 0x4a8a52, 0.85, HOLE_X / 2, 0.005, 0);
+    // --- Expanded Fairway ---
+    const fairway = this._flatPlane(1200, 80, 0x4a8a52, 0.85, 300, 0.005, 0);
     this.scene.add(fairway);
 
-    // --- خطوط Fairway ---
-    for (let i = 0; i < 5; i++) {
-      const line = this._flatPlane(HOLE_X + 60, 0.15, 0x5a9a62, 0.7, HOLE_X / 2, 0.008, -12 + i * 6);
+    // --- Fairway Stripes ---
+    for (let i = 0; i < 9; i++) {
+      const line = this._flatPlane(1200, 0.25, 0x5a9a62, 0.7, 300, 0.008, -32 + i * 8);
       this.scene.add(line);
     }
 
-    // --- الغرين ---
+    // --- Putting Green ---
     const greenGeo = new THREE.CircleGeometry(18, 64);
     const greenMesh = new THREE.Mesh(greenGeo,
       new THREE.MeshStandardMaterial({ color: 0x2d6b3a, roughness: 0.55 }));
@@ -426,7 +442,7 @@ export class GraphicsSystem {
     greenMesh.receiveShadow = true;
     this.scene.add(greenMesh);
 
-    // --- تضاريس الغرين (slopes خفيفة) ---
+    // --- Green Slopes ---
     const greenBump = new THREE.Mesh(
       new THREE.SphereGeometry(15, 32, 16, 0, Math.PI * 2, 0, Math.PI / 2),
       new THREE.MeshStandardMaterial({ color: 0x2d6b3a, roughness: 0.6, transparent: true, opacity: 0.3 })
@@ -435,14 +451,14 @@ export class GraphicsSystem {
     greenBump.scale.y = 0.1;
     this.scene.add(greenBump);
 
-    // --- الجورة ---
+    // --- Hole Cup ---
     const holeCyl = new THREE.CylinderGeometry(0.54, 0.54, 0.4, 32);
     const holeMesh = new THREE.Mesh(holeCyl,
       new THREE.MeshStandardMaterial({ color: 0x0a0a0a, roughness: 0.9 }));
     holeMesh.position.set(HOLE_X, -0.15, 0);
     this.scene.add(holeMesh);
 
-    // حافة الجورة
+    // Hole Cup Rim
     const ringGeo  = new THREE.TorusGeometry(0.54, 0.08, 16, 32);
     const ringMesh = new THREE.Mesh(ringGeo,
       new THREE.MeshStandardMaterial({ color: 0xf0f0f0, roughness: 0.4 }));
@@ -450,16 +466,16 @@ export class GraphicsSystem {
     ringMesh.position.set(HOLE_X, 0.01, 0);
     this.scene.add(ringMesh);
 
-    // --- العلم ---
+    // --- Flag ---
     this._buildFlag(HOLE_X, 0, 0);
 
-    // --- علامات المسافة ---
-    [50, 100, 150].forEach(d => {
+    // --- Distance Markers ---
+    [50, 100, 150, 200, 250, 300, 350, 400, 450, 500, 550, 600].forEach(d => {
       const post = new THREE.Mesh(
         new THREE.CylinderGeometry(0.08, 0.08, 1.5, 8),
         new THREE.MeshStandardMaterial({ color: 0x8B4513, roughness: 0.9 })
       );
-      post.position.set(d, 0.75, 14);
+      post.position.set(d, 0.75, 42); // placed on the side of the wider fairway
       post.castShadow = true;
       this.scene.add(post);
 
@@ -467,39 +483,39 @@ export class GraphicsSystem {
         new THREE.BoxGeometry(0.8, 0.5, 0.05),
         new THREE.MeshStandardMaterial({ color: 0xffffff })
       );
-      sign.position.set(d, 1.4, 14);
+      sign.position.set(d, 1.4, 42);
       this.scene.add(sign);
 
-      const line = this._flatPlane(0.2, 28, 0xffffff, 0.5, d, 0.006, 0);
+      const line = this._flatPlane(0.2, 84, 0xffffff, 0.5, d, 0.006, 0);
       line.material.transparent = true; 
       line.material.opacity = 0.15;
       this.scene.add(line);
     });
 
-    // --- أشجار قريبة ---
+    // --- Majestic Surrounding Trees ---
     const getTerrainHeight = (x, z) => {
       const distFromFairway = Math.abs(z);
-      if (distFromFairway < 25) return 0;
-      let h = Math.sin(x * 0.02) * Math.cos(z * 0.025) * 4;
-      h += Math.sin(x * 0.05 + 2) * 1.8;
-      if (distFromFairway > 70) h += Math.max(0, Math.sin(x * 0.012) * 10);
-      const blend = Math.min(1, (distFromFairway - 25) / 35);
+      if (distFromFairway < 40) return 0;
+      let h = Math.sin(x * 0.004) * Math.cos(z * 0.005) * 25;
+      h += Math.sin(x * 0.01 + 2) * 8;
+      if (distFromFairway > 200) h += Math.max(0, Math.sin(x * 0.0024) * 45);
+      const blend = Math.min(1, (distFromFairway - 40) / 75);
       return h * blend;
     };
 
-    for (let i = 0; i < 65; i++) {
+    for (let i = 0; i < 300; i++) {
       const tree = this._makeTree();
       const side = Math.random() > 0.5 ? 1 : -1;
-      const x    = 5 + Math.random() * 220;
-      const z    = side * (32 + Math.random() * 70);
+      const x    = -500 + Math.random() * 1700;
+      const z    = side * (55 + Math.random() * 650);
       const y    = getTerrainHeight(x, z);
       tree.position.set(x, y, z);
       tree.rotation.y = Math.random() * Math.PI * 2;
       this.scene.add(tree);
     }
 
-    // --- بنكر رمل ---
-    [[180, 0, -35], [270, 0, 32], [120, 0, -45]].forEach(([x, y, z]) => {
+    // --- Sand Bunkers ---
+    [[180, 0, -42], [270, 0, 42], [120, 0, -48], [380, 0, -42]].forEach(([x, y, z]) => {
       const bunkerGeo = new THREE.CylinderGeometry(12, 14, 0.3, 24);
       const bunkerMat = new THREE.MeshStandardMaterial({ 
         color: 0xe8d5a3, 
@@ -519,21 +535,21 @@ export class GraphicsSystem {
       this.scene.add(edge);
     });
 
-    // --- ممر مشاة ---
-    const path = this._flatPlane(3, 200, 0xc4a86b, 0.9, 100, 0.01, 25);
+    // --- Foot Path ---
+    const path = this._flatPlane(4, 800, 0xc4a86b, 0.9, 300, 0.01, 45);
     this.scene.add(path);
 
-    // --- مقاعد محسّنة - شكل احترافي ---
-    for (let i = 0; i < 4; i++) {
+    // --- Rest Benches ---
+    for (let i = 0; i < 6; i++) {
       const bench = this._makeBench();
-      bench.position.set(25 + i * 45, 0, 38);
+      bench.position.set(25 + i * 85, 0, 45);
       bench.rotation.y = -0.2 + Math.random() * 0.1;
       this.scene.add(bench);
     }
 
-    // --- عربة غولف ---
+    // --- Golf Cart ---
     const cart = this._makeGolfCart();
-    cart.position.set(15, 0, -25);
+    cart.position.set(15, 0, -45);
     cart.rotation.y = 0.5;
     this.scene.add(cart);
   }
@@ -819,16 +835,7 @@ export class GraphicsSystem {
   _buildTee() {
     const g = new THREE.Group();
 
-    // قاعدة خشبية
-    const base = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.8, 1.0, 0.08, 16),
-      new THREE.MeshStandardMaterial({ color: 0x8B4513, roughness: 0.8 })
-    );
-    base.position.y = 0.04;
-    base.receiveShadow = true;
-    g.add(base);
-
-    // خطوط بيضاء
+    // خطوط بيضاء للـ Tee Area (زينة فقط)
     const line1 = new THREE.Mesh(
       new THREE.RingGeometry(0.5, 0.55, 32),
       new THREE.MeshStandardMaterial({ color: 0xffffff, transparent: true, opacity: 0.6 })
@@ -845,7 +852,7 @@ export class GraphicsSystem {
     line2.position.y = 0.085;
     g.add(line2);
 
-    // علامة حمراء
+    // علامة حمراء (زينة)
     const marker = new THREE.Mesh(
       new THREE.CylinderGeometry(0.04, 0.04, 0.15, 8),
       new THREE.MeshStandardMaterial({ 
@@ -857,79 +864,18 @@ export class GraphicsSystem {
     marker.position.y = 0.15;
     g.add(marker);
 
-    // حاملة الكرة (Tee)
-    const teeStand = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.02, 0.03, 0.04, 8),
-      new THREE.MeshStandardMaterial({ color: 0xffff00, roughness: 0.4 })
-    );
-    teeStand.position.set(0, 0.1, 0);
-    g.add(teeStand);
-
-    // الكرة قبل الإطلاق
-    this.teeBall = new THREE.Mesh(
-      new THREE.SphereGeometry(0.02135 * 5, 16, 16),
-      new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.3 })
-    );
+    // الكرة قبل الإطلاق - تبدأ كمجموعة فارغة ويتم تعبئتها بالموديل الحقيقي فور تحميله
+    this.teeBall = new THREE.Group();
     this.teeBall.position.set(0, 0.14, 0);
     g.add(this.teeBall);
 
-    // ══ المضرب فقط (بدون جسم اللاعب) ══
-    const clubGroup = new THREE.Group();
+    // المضرب - يبدأ كمجموعة فارغة ويتم وضع الموديل الحقيقي والـ Pivot بداخلها فور تحميله
+    this.clubGroup = new THREE.Group();
     
-    // عمود المضرب
-    const shaft = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.015, 0.012, 1.3, 8),
-      new THREE.MeshStandardMaterial({ 
-        color: 0x888888, 
-        metalness: 0.9, 
-        roughness: 0.2 
-      })
-    );
-    shaft.position.set(0, 0.65, 0);
-    shaft.rotation.x = 0.2;
-    clubGroup.add(shaft);
-
-    // قبضة المضرب
-    const grip = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.022, 0.02, 0.3, 8),
-      new THREE.MeshStandardMaterial({ 
-        color: 0x222222, 
-        roughness: 0.8 
-      })
-    );
-    grip.position.set(0, 1.25, 0.06);
-    grip.rotation.x = 0.2;
-    clubGroup.add(grip);
-
-    // رأس المضرب
-    const head = new THREE.Mesh(
-      new THREE.BoxGeometry(0.14, 0.08, 0.1),
-      new THREE.MeshStandardMaterial({ 
-        color: 0x444444, 
-        metalness: 0.8, 
-        roughness: 0.3 
-      })
-    );
-    head.position.set(0, 0.02, 0.05);
-    clubGroup.add(head);
-
-    // وجه المضرب
-    const face = new THREE.Mesh(
-      new THREE.BoxGeometry(0.12, 0.06, 0.02),
-      new THREE.MeshStandardMaterial({ 
-        color: 0xcccccc, 
-        metalness: 0.95, 
-        roughness: 0.05 
-      })
-    );
-    face.position.set(0, 0.02, 0.11);
-    clubGroup.add(face);
-
-    // وضع المضرب بجانب الـ Tee
-    clubGroup.position.set(0.6, 0, 0.3);
-    clubGroup.rotation.y = -0.5;
-    clubGroup.rotation.z = 0.1;
-    g.add(clubGroup);
+    // وضع المضرب بجانب الـ Tee بشكل افتراضي
+    this.clubGroup.position.set(-0.15, 0, 0.1);
+    this.clubGroup.rotation.set(0, 0, 0.05);
+    g.add(this.clubGroup);
 
     g.position.set(0, 0, 0);
     this.scene.add(g);
@@ -989,44 +935,13 @@ export class GraphicsSystem {
   _buildBall() {
     const R = 0.02135 * 5;
 
-    const canvas = document.createElement('canvas');
-    canvas.width = 512; 
-    canvas.height = 512;
-    const ctx = canvas.getContext('2d');
-    ctx.fillStyle = '#ffffff'; 
-    ctx.fillRect(0, 0, 512, 512);
-    
-    for (let i = 0; i < 400; i++) {
-      const x = Math.random() * 512;
-      const y = Math.random() * 512;
-      const r = 2 + Math.random() * 3;
-      const gr = ctx.createRadialGradient(x, y, 0, x, y, r);
-      gr.addColorStop(0, 'rgba(140,140,140,0.5)');
-      gr.addColorStop(0.7, 'rgba(200,200,200,0.2)');
-      gr.addColorStop(1, 'rgba(255,255,255,0)');
-      ctx.beginPath(); 
-      ctx.arc(x, y, r, 0, Math.PI * 2);
-      ctx.fillStyle = gr; 
-      ctx.fill();
-    }
-
-    ctx.fillStyle = '#cc0000';
-    ctx.font = 'bold 24px Arial';
-    ctx.textAlign = 'center';
-    ctx.fillText('PRO', 256, 256);
-
-    const tex = new THREE.CanvasTexture(canvas);
-    this.ballMesh = new THREE.Mesh(
-      new THREE.SphereGeometry(R, 48, 48),
-      new THREE.MeshStandardMaterial({ 
-        map: tex, 
-        roughness: 0.32, 
-        metalness: 0.05,
-        envMapIntensity: 0.5
-      })
-    );
-    this.ballMesh.castShadow = true;
+    // Initialize ballMesh as a group instead of a procedural sphere geometry.
+    // The loaded GLB model will be added as a child of this group.
+    this.ballMesh = new THREE.Group();
     this.ballGroup.add(this.ballMesh);
+    
+    // Hide the flying ball by default to prevent overlapping/z-fighting with teeBall
+    this.ballGroup.visible = false;
 
     this.ballShadow = new THREE.Mesh(
       new THREE.CircleGeometry(R * 1.7, 32),
@@ -1050,6 +965,25 @@ export class GraphicsSystem {
     this.trajGeo = new THREE.BufferGeometry();
     this.trajLine = new THREE.Line(this.trajGeo, this.trajMat);
     this.scene.add(this.trajLine);
+  }
+
+  _buildAimLine() {
+    const mat = new THREE.LineDashedMaterial({
+      color: 0x00ffcc,
+      dashSize: 0.25,
+      gapSize: 0.15,
+      linewidth: 3
+    });
+    
+    const geo = new THREE.BufferGeometry().setFromPoints([
+      new THREE.Vector3(0, 0, 0),
+      new THREE.Vector3(15, 0, 0)
+    ]);
+    
+    this.aimLine = new THREE.Line(geo, mat);
+    this.aimLine.computeLineDistances();
+    this.aimLine.visible = false;
+    this.scene.add(this.aimLine);
   }
 
   _buildLandingMarker() {
@@ -1123,20 +1057,23 @@ export class GraphicsSystem {
   }
 
   // ── تحديث المواقع ───────────────────────────────────────────
-  updateBallPosition(pos, omega) {
+  updateBallPosition(pos, omega, dt) {
     const R = 0.02135 * 5;
     this.ballGroup.position.set(pos.x, pos.z + R, -pos.y);
     this.ballShadow.position.set(pos.x, 0.005, -pos.y);
     this.ballShadow.material.opacity = Math.max(0.04, 0.28 - pos.z * 0.015);
     
-    if (omega) {
-      this.ballMesh.rotation.x += omega.x * 0.016;
-      this.ballMesh.rotation.y += omega.y * 0.016;
-      this.ballMesh.rotation.z += omega.z * 0.016;
+    // Ensure flying ball is visible and tee ball is hidden
+    this.ballGroup.visible = true;
+    if (this.teeBall) {
+      this.teeBall.visible = false;
     }
 
-    if (this.teeBall && pos.x > 0.5) {
-      this.teeBall.visible = false;
+    if (omega) {
+      const stepDt = (dt !== undefined) ? dt : 0.016;
+      this.ballMesh.rotation.x += omega.x * stepDt;
+      this.ballMesh.rotation.y += omega.y * stepDt;
+      this.ballMesh.rotation.z += omega.z * stepDt;
     }
   }
 
@@ -1186,6 +1123,67 @@ export class GraphicsSystem {
   updateEnvironment(dt) {
     this.time += dt;
 
+    // تحريك المضرب (Smooth, stable and FPS-independent swing rotation)
+    const clubObj = this.clubPivot || this.proceduralClubGroup;
+    if (clubObj) {
+      if (this.clubState === 'idle') {
+        // Keep the club completely stationary when not swinging to remove all jitter
+        if (this.clubPivot) {
+          this.clubPivot.rotation.z = 0;
+        } else {
+          this.proceduralClubGroup.rotation.z = 0.05;
+        }
+      } else {
+        this.swingTime += dt;
+        const t = this.swingTime;
+        
+        const T_back = 0.40;
+        const T_down = 0.15;
+        const T_follow = 0.25;
+        const T_return = 0.50;
+
+        let zRot = 0;
+
+        if (t < T_back) {
+          // 1. Backswing: Smooth sine-squared easing (negative Z rotation moves club backward)
+          const pct = t / T_back;
+          zRot = -1.2 * Math.sin(pct * Math.PI / 2) * Math.sin(pct * Math.PI / 2);
+        } else if (t < T_back + T_down) {
+          // 2. Downswing: Acceleration to impact (using cosine interpolation, moves forward to 0.0)
+          const pct = (t - T_back) / T_down;
+          zRot = -1.2 * Math.cos(pct * Math.PI / 2);
+        } else if (t < T_back + T_down + T_follow) {
+          // 3. Follow-through: Trigger impact exactly once (positive Z rotation moves past the ball)
+          if (this.onImpact) {
+            this.onImpact();
+            this.onImpact = null;
+          }
+          const pct = (t - (T_back + T_down)) / T_follow;
+          zRot = 0.8 * Math.sin(pct * Math.PI / 2);
+        } else if (t < T_back + T_down + T_follow + T_return) {
+          // 4. Return to address: Smooth squared return easing back to zero
+          const pct = (t - (T_back + T_down + T_follow)) / T_return;
+          zRot = 0.8 * (1 - pct) * (1 - pct);
+        } else {
+          // 5. Done: Return exactly to zero
+          zRot = 0;
+          this.clubState = 'idle';
+          this.swingTime = 0;
+          if (this.onSwingComplete) {
+            this.onSwingComplete();
+            this.onSwingComplete = null;
+          }
+        }
+
+        // Apply rotation to the target pivot
+        if (this.clubPivot) {
+          this.clubPivot.rotation.z = zRot;
+        } else {
+          this.proceduralClubGroup.rotation.z = 0.05 + zRot;
+        }
+      }
+    }
+
     // تحريك الطيور
     this.birds.forEach(bird => {
       bird.angle += bird.speed * dt * 0.3;
@@ -1212,17 +1210,339 @@ export class GraphicsSystem {
     }
   }
 
+  startSwing(onImpact, onComplete) {
+    this.clubState = 'swinging';
+    this.swingTime = 0;
+    this.onImpact = onImpact;
+    this.onSwingComplete = onComplete;
+  }
+
+  // ── تحميل الموديلات وإدارتها ──────────────────────────────────────
+  _loadModels() {
+    const manager = new THREE.LoadingManager();
+    const progressBar = document.getElementById('progress-bar');
+    const progressText = document.getElementById('progress-text');
+    const loadingOverlay = document.getElementById('loading-overlay');
+
+    manager.onStart = (url, itemsLoaded, itemsTotal) => {
+      if (progressBar) progressBar.style.width = '0%';
+      if (progressText) progressText.textContent = '0%';
+    };
+
+    manager.onProgress = (url, itemsLoaded, itemsTotal) => {
+      const progress = Math.round((itemsLoaded / itemsTotal) * 100);
+      if (progressBar) progressBar.style.width = `${progress}%`;
+      if (progressText) progressText.textContent = `${progress}%`;
+    };
+
+    manager.onLoad = () => {
+      setTimeout(() => {
+        if (loadingOverlay) {
+          loadingOverlay.style.opacity = '0';
+          loadingOverlay.style.visibility = 'hidden';
+        }
+      }, 500);
+    };
+
+    manager.onError = (url) => {
+      console.warn(`Failed loading asset: ${url}`);
+    };
+
+    const loader = new GLTFLoader(manager);
+
+    loader.load('Golf%20ball.glb', (gltf) => {
+      this._onBallModelLoaded(gltf);
+    }, undefined, (err) => console.error('Error loading golf ball:', err));
+
+    loader.load('Golf%20tee.glb', (gltf) => {
+      this._onTeeModelLoaded(gltf);
+    }, undefined, (err) => console.error('Error loading golf tee:', err));
+
+    loader.load('Golf%20club.glb', (gltf) => {
+      this._onClubModelLoaded(gltf);
+    }, undefined, (err) => console.error('Error loading golf club:', err));
+  }
+
+  _isBoxInCameraView(box) {
+    this.camera.updateMatrixWorld(true);
+    const projScreenMatrix = new THREE.Matrix4();
+    projScreenMatrix.multiplyMatrices(this.camera.projectionMatrix, this.camera.matrixWorldInverse);
+    const frustum = new THREE.Frustum();
+    frustum.setFromProjectionMatrix(projScreenMatrix);
+    return frustum.intersectsBox(box);
+  }
+
+  _adjustCameraToFit(box) {
+    const center = new THREE.Vector3();
+    box.getCenter(center);
+    const size = new THREE.Vector3();
+    box.getSize(size);
+
+    const maxDim = Math.max(size.x, size.y, size.z);
+    const fov = this.camera.fov * (Math.PI / 180);
+    let cameraZ = Math.abs(maxDim / 2 / Math.tan(fov / 2));
+    cameraZ *= 2.5;
+
+    const direction = new THREE.Vector3(-1.2, 0.9, 0.8).normalize();
+    const newCameraPosition = center.clone().addScaledVector(direction, cameraZ);
+
+    this.camera.position.copy(newCameraPosition);
+    this.controls.target.copy(center);
+    this.controls.update();
+
+    console.log(`[Camera Adjust] Positioned camera at:`, this.camera.position, `looking at center:`, center);
+  }
+
+  _onBallModelLoaded(gltf) {
+    const ballModel = gltf.scene;
+    
+    ballModel.updateMatrixWorld(true);
+
+    ballModel.traverse(node => {
+      if (node.isMesh) {
+        node.castShadow = true;
+        node.receiveShadow = true;
+        if (node.material) {
+          node.material.roughness = 0.35;
+          node.material.metalness = 0.05;
+          if (node.material.map) node.material.map.colorSpace = THREE.SRGBColorSpace;
+        }
+        if (!node.geometry.attributes.normal) {
+          node.geometry.computeVertexNormals();
+        }
+      }
+    });
+
+    let box = new THREE.Box3().setFromObject(ballModel);
+    let size = new THREE.Vector3();
+    box.getSize(size);
+    const R = 0.02135 * 5;
+    const targetDiameter = R * 2;
+    const maxExtent = Math.max(size.x, size.y, size.z);
+    const scaleFactor = targetDiameter / maxExtent;
+    ballModel.scale.set(scaleFactor, scaleFactor, scaleFactor);
+
+    ballModel.updateMatrixWorld(true);
+
+    box.setFromObject(ballModel);
+    const center = new THREE.Vector3();
+    box.getCenter(center);
+    ballModel.position.sub(center);
+
+    ballModel.updateMatrixWorld(true);
+
+    box.setFromObject(ballModel);
+    box.getSize(size);
+    box.getCenter(center);
+
+    const ballWrapper = new THREE.Group();
+    ballWrapper.add(ballModel);
+    ballWrapper.updateMatrixWorld(true);
+
+    this.loadedBallModel = ballWrapper;
+
+    if (this.ballGroup && this.ballMesh) {
+      this.ballGroup.remove(this.ballMesh);
+      this.ballMesh = ballWrapper;
+      this.ballGroup.add(this.ballMesh);
+      this.ballGroup.visible = false; // Hide by default
+    }
+
+    if (this.teeGroup && this.teeBall) {
+      this.teeGroup.remove(this.teeBall);
+      this.teeBall = ballWrapper.clone();
+      const teeHeight = this.loadedTeeHeight || 0.14; 
+      this.teeBall.position.set(0, teeHeight - 0.01, 0);
+      this.teeGroup.add(this.teeBall);
+      this.teeBall.visible = true; // Tee ball should be visible initially!
+    }
+
+    console.log(`[Golf Ball GLB Loaded Successfully]`);
+    console.log(`- Position:`, ballModel.position);
+    console.log(`- Rotation:`, ballModel.rotation);
+    console.log(`- Scale:`, ballModel.scale);
+    console.log(`- Bounding Box Min:`, box.min, `Max:`, box.max);
+    console.log(`- Size:`, size);
+    console.log(`- Center:`, center);
+    console.log(`- Distance from camera:`, this.camera.position.distanceTo(center));
+
+    if (!this._isBoxInCameraView(box)) {
+      console.log(`[Camera Adjust] Golf Ball is outside camera view! Adjusting...`);
+      this._adjustCameraToFit(box);
+    }
+  }
+
+  _onTeeModelLoaded(gltf) {
+    const teeModel = gltf.scene;
+
+    teeModel.updateMatrixWorld(true);
+
+    teeModel.traverse(node => {
+      if (node.isMesh) {
+        node.castShadow = true;
+        node.receiveShadow = true;
+        if (!node.geometry.attributes.normal) {
+          node.geometry.computeVertexNormals();
+        }
+      }
+    });
+
+    let box = new THREE.Box3().setFromObject(teeModel);
+    let size = new THREE.Vector3();
+    box.getSize(size);
+    
+    const targetHeight = 0.20;
+    const scaleFactor = targetHeight / size.y;
+    teeModel.scale.set(scaleFactor, scaleFactor, scaleFactor);
+
+    teeModel.updateMatrixWorld(true);
+
+    box.setFromObject(teeModel);
+    teeModel.position.x = - (box.min.x + box.max.x) / 2;
+    teeModel.position.z = - (box.min.z + box.max.z) / 2;
+    teeModel.position.y = - box.min.y;
+
+    teeModel.updateMatrixWorld(true);
+
+    box.setFromObject(teeModel);
+    this.loadedTeeHeight = box.max.y;
+
+    if (this.proceduralTeeStand) {
+      this.teeGroup.remove(this.proceduralTeeStand);
+    }
+    if (this.proceduralTeeBase) {
+      this.teeGroup.remove(this.proceduralTeeBase);
+    }
+
+    this.teeGroup.add(teeModel);
+
+    if (this.teeBall) {
+      this.teeBall.position.y = this.loadedTeeHeight - 0.01;
+    }
+
+    const center = new THREE.Vector3();
+    box.getCenter(center);
+    box.getSize(size);
+
+    console.log(`[Golf Tee GLB Loaded Successfully]`);
+    console.log(`- Position:`, teeModel.position);
+    console.log(`- Rotation:`, teeModel.rotation);
+    console.log(`- Scale:`, teeModel.scale);
+    console.log(`- Bounding Box Min:`, box.min, `Max:`, box.max);
+    console.log(`- Size:`, size);
+    console.log(`- Center:`, center);
+    console.log(`- Distance from camera:`, this.camera.position.distanceTo(center));
+
+    if (!this._isBoxInCameraView(box)) {
+      console.log(`[Camera Adjust] Golf Tee is outside camera view! Adjusting...`);
+      this._adjustCameraToFit(box);
+    }
+  }
+
+  _onClubModelLoaded(gltf) {
+    const clubModel = gltf.scene;
+
+    clubModel.updateMatrixWorld(true);
+
+    clubModel.traverse(node => {
+      if (node.isMesh) {
+        node.castShadow = true;
+        node.receiveShadow = true;
+        if (!node.geometry.attributes.normal) {
+          node.geometry.computeVertexNormals();
+        }
+      }
+    });
+
+    let box = new THREE.Box3().setFromObject(clubModel);
+    let size = new THREE.Vector3();
+    box.getSize(size);
+
+    const targetHeight = 1.3;
+    const scaleFactor = targetHeight / size.y;
+    clubModel.scale.set(scaleFactor, scaleFactor, scaleFactor);
+
+    clubModel.updateMatrixWorld(true);
+
+    box.setFromObject(clubModel);
+    clubModel.position.x = - (box.min.x + box.max.x) / 2;
+    clubModel.position.z = - (box.min.z + box.max.z) / 2;
+    clubModel.position.y = - box.max.y;
+
+    clubModel.updateMatrixWorld(true);
+
+    this.clubPivot = new THREE.Group();
+    this.clubPivot.add(clubModel);
+    this.clubPivot.position.set(0, targetHeight, 0);
+
+    this.clubPivot.updateMatrixWorld(true);
+
+    if (this.clubGroup) {
+      while (this.clubGroup.children.length > 0) {
+        this.clubGroup.remove(this.clubGroup.children[0]);
+      }
+
+      this.clubGroup.add(this.clubPivot);
+      
+      // Calculate perfect address position so the front face of the club head
+      // touches the back of the ball.
+      const R = 0.02135 * 5; // ball radius
+      const ballMinX = -R;
+      const tempBox = new THREE.Box3().setFromObject(clubModel);
+      const clubMaxX = tempBox.max.x;
+      const targetClubX = ballMinX - clubMaxX;
+
+      this.clubGroup.position.set(targetClubX, 0, 0); 
+      this.clubGroup.rotation.set(0, 0, 0.0);
+      this.clubGroup.updateMatrixWorld(true);
+    }
+
+    box.setFromObject(clubModel);
+    const center = new THREE.Vector3();
+    box.getCenter(center);
+    box.getSize(size);
+
+    console.log(`[Golf Club GLB Loaded Successfully]`);
+    console.log(`- Position:`, clubModel.position);
+    console.log(`- Rotation:`, clubModel.rotation);
+    console.log(`- Scale:`, clubModel.scale);
+    console.log(`- Bounding Box Min:`, box.min, `Max:`, box.max);
+    console.log(`- Size:`, size);
+    console.log(`- Center:`, center);
+    console.log(`- Distance from camera:`, this.camera.position.distanceTo(center));
+
+    if (!this._isBoxInCameraView(box)) {
+      console.log(`[Camera Adjust] Golf Club is outside camera view! Adjusting...`);
+      this._adjustCameraToFit(box);
+    }
+  }
+
   // ── أوضاع الكاميرا ──────────────────────────────────────────
-  updateCamera(ballPhysicsPos) {
-    const ballVec = new THREE.Vector3(ballPhysicsPos.x, ballPhysicsPos.z, -ballPhysicsPos.y);
+  updateCamera(ballPhysicsPos, phiDeg) {
+    const R = 0.02135 * 5;
+    const ballVec = new THREE.Vector3(ballPhysicsPos.x, ballPhysicsPos.z + R, -ballPhysicsPos.y);
 
     if (this.cameraMode === 'follow') {
-      const desired = new THREE.Vector3(
-        ballPhysicsPos.x - 25, 
-        ballPhysicsPos.z + 12, 
-        -ballPhysicsPos.y + 8
-      );
-      this.camera.position.lerp(desired, 0.06);
+      // 🎥 PGA Tour Ball Follow Camera
+      // Position camera behind the ball along the flight vector, elevated slightly
+      let phiRad = (phiDeg !== undefined ? phiDeg : 0) * Math.PI / 180;
+      
+      const camDist = 12.0;
+      const camHeight = 3.5;
+      
+      // Calculate target camera position behind the ball
+      const desiredX = ballVec.x - camDist * Math.cos(phiRad);
+      const desiredZ = ballVec.z + camDist * Math.sin(phiRad);
+      const desiredY = ballVec.y + camHeight;
+      
+      const desiredCamPos = new THREE.Vector3(desiredX, desiredY, desiredZ);
+      
+      // Interpolate smoothly
+      this.camera.position.lerp(desiredCamPos, 0.05);
+      
+      // Collision avoidance with ground
+      this.camera.position.y = Math.max(this.camera.position.y, 0.4);
+      
       this.controls.target.lerp(ballVec, 0.08);
       this.controls.enabled = true;
 
@@ -1238,10 +1558,44 @@ export class GraphicsSystem {
       this.controls.enabled = true;
 
     } else if (this.cameraMode === 'player') {
-      const desired = new THREE.Vector3(-3, 2, 0);
-      this.camera.position.lerp(desired, 0.1);
-      this.controls.target.lerp(new THREE.Vector3(50, 0, 0), 0.05);
+      // 🎥 Aim Camera: smooth positioning behind the ball relative to aim angle
+      const phiRad = (phiDeg !== undefined ? phiDeg : 0) * Math.PI / 180;
+      const camDist = 3.0;
+      const camHeight = 1.0;
+      
+      const desiredX = ballVec.x - camDist * Math.cos(phiRad);
+      const desiredZ = ballVec.z + camDist * Math.sin(phiRad);
+      const desiredY = ballVec.y + camHeight;
+      
+      const desiredCamPos = new THREE.Vector3(desiredX, desiredY, desiredZ);
+      
+      this.camera.position.lerp(desiredCamPos, 0.08);
+      
+      // Collision avoidance with ground
+      this.camera.position.y = Math.max(this.camera.position.y, 0.3);
+      
+      this.controls.target.lerp(ballVec, 0.08);
       this.controls.enabled = true;
+
+    } else if (this.cameraMode === 'hole') {
+      // 🎥 Hole Cinematic Camera: orbit slowly around the cup
+      const orbitSpeed = 0.25;
+      const angle = (this.time !== undefined ? this.time : performance.now() / 1000) * orbitSpeed;
+      const radius = 3.5;
+      const height = 1.8;
+      
+      const desiredX = HOLE_X + radius * Math.cos(angle);
+      const desiredZ = 0 + radius * Math.sin(angle);
+      const desiredY = height;
+      
+      const desiredCamPos = new THREE.Vector3(desiredX, desiredY, desiredZ);
+      
+      this.camera.position.lerp(desiredCamPos, 0.04);
+      
+      // Look slightly inside the cup (Y = -0.05)
+      const holeTarget = new THREE.Vector3(HOLE_X, -0.05, 0);
+      this.controls.target.lerp(holeTarget, 0.05);
+      this.controls.enabled = false; // lock orbit controls to keep camera control automatic
 
     } else {
       this.controls.enabled = true;
@@ -1251,21 +1605,21 @@ export class GraphicsSystem {
       const dir = new THREE.Vector3();
       const right = new THREE.Vector3();
       
-      if (this._keys['w'] || this._keys['arrowup']) { 
+      if (this._keys['w']) { 
         this.camera.getWorldDirection(dir); 
         dir.y = 0; 
         dir.normalize(); 
         this.camera.position.addScaledVector(dir, moveSpeed); 
         this.controls.target.addScaledVector(dir, moveSpeed); 
       }
-      if (this._keys['s'] || this._keys['arrowdown']) { 
+      if (this._keys['s']) { 
         this.camera.getWorldDirection(dir); 
         dir.y = 0; 
         dir.normalize(); 
         this.camera.position.addScaledVector(dir, -moveSpeed); 
         this.controls.target.addScaledVector(dir, -moveSpeed); 
       }
-      if (this._keys['a'] || this._keys['arrowleft']) { 
+      if (this._keys['a']) { 
         this.camera.getWorldDirection(dir); 
         dir.y = 0; 
         dir.normalize(); 
@@ -1273,7 +1627,7 @@ export class GraphicsSystem {
         this.camera.position.addScaledVector(right, -moveSpeed); 
         this.controls.target.addScaledVector(right, -moveSpeed); 
       }
-      if (this._keys['d'] || this._keys['arrowright']) { 
+      if (this._keys['d']) { 
         this.camera.getWorldDirection(dir); 
         dir.y = 0; 
         dir.normalize(); 
@@ -1303,10 +1657,107 @@ export class GraphicsSystem {
     this.renderer.setSize(window.innerWidth, window.innerHeight);
   }
 
+  updateClubPositionAndAim(pos, phiDeg) {
+    if (!this.clubGroup) return;
+
+    // Show the club
+    this.clubGroup.visible = true;
+
+    const R = 0.02135 * 5; // ball radius
+    let clubMaxX = 0.06; // fallback
+    if (this.clubMaxX !== undefined) {
+      clubMaxX = this.clubMaxX;
+    }
+
+    const targetDistance = R + clubMaxX;
+    const phiRad = (phiDeg !== undefined ? phiDeg : 0) * Math.PI / 180;
+
+    // Three.js world coordinates of the ball
+    const ballX = pos.x;
+    const ballY = pos.z; // height
+    const ballZ = -pos.y;
+
+    // Position clubGroup behind the ball along the aim angle
+    const targetClubX = ballX - targetDistance * Math.cos(phiRad);
+    const targetClubZ = ballZ + targetDistance * Math.sin(phiRad);
+
+    this.clubGroup.position.set(targetClubX, ballY, targetClubZ);
+    this.clubGroup.rotation.set(0, phiRad, 0);
+    this.clubGroup.updateMatrixWorld(true);
+  }
+
+  getClubForwardVector(thetaDeg) {
+    if (!this.clubPivot) return new THREE.Vector3(1, 0, 0);
+
+    const thetaRad = (thetaDeg !== undefined ? thetaDeg : 15) * Math.PI / 180;
+    
+    // Local forward vector with loft angle: (cos(theta), sin(theta), 0)
+    const localForward = new THREE.Vector3(Math.cos(thetaRad), Math.sin(thetaRad), 0);
+    
+    this.clubPivot.updateMatrixWorld(true);
+    
+    const worldForward = localForward.transformDirection(this.clubPivot.matrixWorld);
+    return worldForward;
+  }
+
+  positionBallAt(pos) {
+    const R = 0.02135 * 5;
+    
+    // Set ball group position in Three.js coordinates
+    this.ballGroup.position.set(pos.x, pos.z + R, -pos.y);
+    this.ballShadow.position.set(pos.x, 0.005, -pos.y);
+    
+    const isStart = Math.hypot(pos.x, pos.y) < 0.01;
+    if (isStart) {
+      this.ballGroup.visible = false;
+      if (this.teeBall) this.teeBall.visible = true;
+    } else {
+      this.ballGroup.visible = true;
+      if (this.teeBall) this.teeBall.visible = false;
+    }
+    this.ballGroup.updateMatrixWorld(true);
+  }
+
+  updateAimLine(pos, phiDeg, thetaDeg) {
+    if (!this.aimLine) return;
+
+    const R = 0.02135 * 5;
+    const ballVec = new THREE.Vector3(pos.x, pos.z + R, -pos.y);
+    this.aimLine.position.copy(ballVec);
+
+    const clubDir = this.getClubForwardVector(thetaDeg);
+    const length = 15;
+    const dx = length * clubDir.x;
+    const dy = length * clubDir.y;
+    const dz = length * clubDir.z;
+
+    const points = [
+      new THREE.Vector3(0, 0, 0),
+      new THREE.Vector3(dx, dy, dz)
+    ];
+
+    this.aimLine.geometry.setFromPoints(points);
+    this.aimLine.geometry.attributes.position.needsUpdate = true;
+    this.aimLine.computeLineDistances();
+    
+    this.aimLine.visible = true;
+  }
+
   resetBall() {
     this.ballGroup.position.set(0, 0.02135 * 5, 0);
     this.ballShadow.position.set(0, 0.005, 0);
     this.ballMesh.rotation.set(0, 0, 0);
+    
+    // Hide the flying ball and show the tee ball again to prevent overlap
+    this.ballGroup.visible = false;
+    if (this.teeBall) {
+      this.teeBall.visible = true;
+    }
+    
+    if (this.aimLine) {
+      this.aimLine.visible = false;
+    }
+    
     this.clearTrajectory();
   }
 }
