@@ -28,6 +28,8 @@ export class GraphicsSystem {
     this.proceduralTeeBase = null;
     this.proceduralTeeStand = null;
     this.proceduralClubGroup = null;
+    this.groundMeshes = [];
+    this.raycaster = new THREE.Raycaster();
 
     // Swing animation state
     this.clubState = 'idle'; // 'idle' | 'swinging'
@@ -38,8 +40,8 @@ export class GraphicsSystem {
     this._initRenderer();
     this._initLighting();
     this._buildSky();
-    this._buildEnvironment();
     this._buildCourse();
+    this._buildEnvironment();
     this._buildTee();
     this._buildBall();
     this._buildTrajectoryLine();
@@ -253,22 +255,22 @@ export class GraphicsSystem {
     );
     island.position.set(-250, 1, 200);
     this.scene.add(island);
+    this.groundMeshes.push(island);
 
     // شجرة على الجزيرة
     const islandTree = this._makeTree(0.8);
-    islandTree.position.set(-250, 3, 200);
     this.scene.add(islandTree);
+    this.alignObjectToGround(islandTree, -250, 200, "Island Tree");
 
-    // Distant trees - aligned to terrain height
+    // Distant trees - aligned to terrain height via raycasting
     for (let i = 0; i < 50; i++) {
       const tree = this._makeTree(0.6 + Math.random() * 0.4);
       const angle = Math.random() * Math.PI * 2;
       const dist = 300 + Math.random() * 200;
       const x = Math.cos(angle) * dist;
       const z = Math.sin(angle) * dist;
-      const y = this.getTerrainHeight(x, z);
-      tree.position.set(x, y, z);
       this.scene.add(tree);
+      this.alignObjectToGround(tree, x, z, `Distant Tree ${i}`);
     }
 
     // طيور (سيتم تحريكها)
@@ -396,6 +398,8 @@ export class GraphicsSystem {
 
   // ── بناء الملعب ─────────────────────────────────────────────
   _buildCourse() {
+    this.groundMeshes = [];
+
     // --- Massive main rough terrain ---
     const roughGeo = new THREE.PlaneGeometry(4000, 3000, 160, 120);
     const roughPos = roughGeo.attributes.position;
@@ -412,10 +416,12 @@ export class GraphicsSystem {
     roughMesh.position.set(300, 0, 0); // centered at 300
     roughMesh.receiveShadow = true;
     this.scene.add(roughMesh);
+    this.groundMeshes.push(roughMesh);
 
     // --- Expanded Fairway ---
     const fairway = this._flatPlane(1200, 80, 0x4a8a52, 0.85, 300, 0.005, 0);
     this.scene.add(fairway);
+    this.groundMeshes.push(fairway);
 
     // --- Fairway Stripes ---
     for (let i = 0; i < 9; i++) {
@@ -431,6 +437,7 @@ export class GraphicsSystem {
     greenMesh.position.set(HOLE_X, 0.01, 0);
     greenMesh.receiveShadow = true;
     this.scene.add(greenMesh);
+    this.groundMeshes.push(greenMesh);
 
     // --- Green Slopes ---
     const greenBump = new THREE.Mesh(
@@ -488,10 +495,9 @@ export class GraphicsSystem {
       const side = Math.random() > 0.5 ? 1 : -1;
       const x    = -500 + Math.random() * 1700;
       const z    = side * (55 + Math.random() * 650);
-      const y    = this.getTerrainHeight(x, z);
-      tree.position.set(x, y, z);
       tree.rotation.y = Math.random() * Math.PI * 2;
       this.scene.add(tree);
+      this.alignObjectToGround(tree, x, z, `Surrounding Tree ${i}`);
     }
 
     // --- Sand Bunkers ---
@@ -505,6 +511,7 @@ export class GraphicsSystem {
       bunker.position.set(x, y - 0.1, z);
       bunker.receiveShadow = true;
       this.scene.add(bunker);
+      this.groundMeshes.push(bunker);
 
       const edge = new THREE.Mesh(
         new THREE.TorusGeometry(13, 0.5, 8, 24),
@@ -1046,7 +1053,7 @@ export class GraphicsSystem {
   // ── تحديث المواقع ───────────────────────────────────────────
   updateBallPosition(pos, omega, dt) {
     const R = this.ballRadius || (0.02135 * 5);
-    const groundHeight = this.getTerrainHeight(pos.x, -pos.y);
+    const groundHeight = this.getGroundHeightRaycast(pos.x, -pos.y);
     const ballHeight = groundHeight + (pos.z - 0.02135) + R;
 
     this.ballGroup.position.set(pos.x, ballHeight, -pos.y);
@@ -1693,7 +1700,7 @@ export class GraphicsSystem {
 
   positionBallAt(pos) {
     const R = this.ballRadius || (0.02135 * 5);
-    const groundHeight = this.getTerrainHeight(pos.x, -pos.y);
+    const groundHeight = this.getGroundHeightRaycast(pos.x, -pos.y);
     
     // Set ball group position in Three.js coordinates
     this.ballGroup.position.set(pos.x, groundHeight + R, -pos.y);
@@ -1751,9 +1758,54 @@ export class GraphicsSystem {
     return h * blend;
   }
 
+  getGroundHeightRaycast(x, z) {
+    if (!this.raycaster) {
+      this.raycaster = new THREE.Raycaster();
+    }
+    // Setup raycaster from Y=1000 pointing down
+    this.raycaster.set(new THREE.Vector3(x, 1000, z), new THREE.Vector3(0, -1, 0));
+    
+    const targets = this.groundMeshes ? this.groundMeshes.filter(m => m) : [];
+    if (targets.length === 0) {
+      return this.getTerrainHeight(x, z);
+    }
+    
+    const intersects = this.raycaster.intersectObjects(targets, false);
+    if (intersects.length > 0) {
+      return intersects[0].point.y;
+    }
+    
+    return this.getTerrainHeight(x, z);
+  }
+
+  alignObjectToGround(obj, x, z, name = 'Element') {
+    // 1. Temporarily position at (x, 0, z)
+    obj.position.set(x, 0, z);
+    obj.updateMatrixWorld(true);
+    
+    // 2. Compute bounding box and sphere
+    const box = new THREE.Box3().setFromObject(obj);
+    const sphere = new THREE.Sphere();
+    box.getBoundingSphere(sphere);
+    
+    // 3. Extract the bottom offset (lowest point in local space since position Y is 0)
+    const bottomOffset = box.min.y;
+    
+    // 4. Get exact ground height using raycasting
+    const groundHeight = this.getGroundHeightRaycast(x, z);
+    
+    // 5. Align object's Y so the bottom touches groundHeight
+    const finalY = groundHeight - bottomOffset;
+    obj.position.set(x, finalY, z);
+    obj.updateMatrixWorld(true);
+    
+    // 6. Print diagnostics console log
+    console.log(`[Diagnostic] Name: ${name}, Bounding Box: min(${box.min.x.toFixed(3)}, ${box.min.y.toFixed(3)}, ${box.min.z.toFixed(3)}) max(${box.max.x.toFixed(3)}, ${box.max.y.toFixed(3)}, ${box.max.z.toFixed(3)}), Bounding Sphere Radius: ${sphere.radius.toFixed(3)}, Pivot Position: (${obj.position.x.toFixed(3)}, ${obj.position.y.toFixed(3)}, ${obj.position.z.toFixed(3)}), Ground Height: ${groundHeight.toFixed(3)}, Final Position: (${obj.position.x.toFixed(3)}, ${obj.position.y.toFixed(3)}, ${obj.position.z.toFixed(3)})`);
+  }
+
   resetBall() {
     const R = this.ballRadius || (0.02135 * 5);
-    const groundHeight = this.getTerrainHeight(0, 0);
+    const groundHeight = this.getGroundHeightRaycast(0, 0);
     this.ballGroup.position.set(0, groundHeight + R, 0);
     this.ballShadow.position.set(0, groundHeight + 0.005, 0);
     this.ballMesh.rotation.set(0, 0, 0);
