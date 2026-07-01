@@ -259,16 +259,15 @@ export class GraphicsSystem {
     islandTree.position.set(-250, 3, 200);
     this.scene.add(islandTree);
 
-    // أشجار بعيدة - أكثر
+    // Distant trees - aligned to terrain height
     for (let i = 0; i < 50; i++) {
       const tree = this._makeTree(0.6 + Math.random() * 0.4);
       const angle = Math.random() * Math.PI * 2;
       const dist = 300 + Math.random() * 200;
-      tree.position.set(
-        Math.cos(angle) * dist,
-        0,
-        Math.sin(angle) * dist
-      );
+      const x = Math.cos(angle) * dist;
+      const z = Math.sin(angle) * dist;
+      const y = this.getTerrainHeight(x, z);
+      tree.position.set(x, y, z);
       this.scene.add(tree);
     }
 
@@ -402,17 +401,8 @@ export class GraphicsSystem {
     const roughPos = roughGeo.attributes.position;
     for (let i = 0; i < roughPos.count; i++) {
       const x = roughPos.getX(i), z = roughPos.getY(i);
-      const onFairway = Math.abs(z) < 40;
-      let h = 0;
-      if (!onFairway) {
-        // Natural mountain terrain heights scaled proportionally (divided frequency by 5)
-        h  = Math.sin(x * 0.004) * Math.cos(z * 0.005) * 25;
-        h += Math.sin(x * 0.01 + 2) * 8;
-        h += Math.cos(z * 0.006 + 1) * 10;
-        if (Math.abs(z) > 200) h += Math.max(0, Math.sin(x * 0.0024) * 45);
-        const blend = Math.min(1, (Math.abs(z) - 40) / 75);
-        h *= blend;
-      }
+      // roughMesh will be at world X position 300, so local x corresponds to world x + 300
+      const h = this.getTerrainHeight(x + 300, z);
       roughPos.setZ(i, h);
     }
     roughGeo.computeVertexNormals();
@@ -493,22 +483,12 @@ export class GraphicsSystem {
     });
 
     // --- Majestic Surrounding Trees ---
-    const getTerrainHeight = (x, z) => {
-      const distFromFairway = Math.abs(z);
-      if (distFromFairway < 40) return 0;
-      let h = Math.sin(x * 0.004) * Math.cos(z * 0.005) * 25;
-      h += Math.sin(x * 0.01 + 2) * 8;
-      if (distFromFairway > 200) h += Math.max(0, Math.sin(x * 0.0024) * 45);
-      const blend = Math.min(1, (distFromFairway - 40) / 75);
-      return h * blend;
-    };
-
     for (let i = 0; i < 300; i++) {
       const tree = this._makeTree();
       const side = Math.random() > 0.5 ? 1 : -1;
       const x    = -500 + Math.random() * 1700;
       const z    = side * (55 + Math.random() * 650);
-      const y    = getTerrainHeight(x, z);
+      const y    = this.getTerrainHeight(x, z);
       tree.position.set(x, y, z);
       tree.rotation.y = Math.random() * Math.PI * 2;
       this.scene.add(tree);
@@ -542,14 +522,20 @@ export class GraphicsSystem {
     // --- Rest Benches ---
     for (let i = 0; i < 6; i++) {
       const bench = this._makeBench();
-      bench.position.set(25 + i * 85, 0, 45);
+      const bx = 25 + i * 85;
+      const bz = 45;
+      const by = this.getTerrainHeight(bx, bz);
+      bench.position.set(bx, by, bz);
       bench.rotation.y = -0.2 + Math.random() * 0.1;
       this.scene.add(bench);
     }
 
     // --- Golf Cart ---
     const cart = this._makeGolfCart();
-    cart.position.set(15, 0, -45);
+    const cx = 15;
+    const cz = -45;
+    const cy = this.getTerrainHeight(cx, cz);
+    cart.position.set(cx, cy, cz);
     cart.rotation.y = 0.5;
     this.scene.add(cart);
   }
@@ -934,6 +920,7 @@ export class GraphicsSystem {
   // ── الكرة ───────────────────────────────────────────────────
   _buildBall() {
     const R = 0.02135 * 5;
+    this.ballRadius = R;
 
     // Initialize ballMesh as a group instead of a procedural sphere geometry.
     // The loaded GLB model will be added as a child of this group.
@@ -1058,10 +1045,13 @@ export class GraphicsSystem {
 
   // ── تحديث المواقع ───────────────────────────────────────────
   updateBallPosition(pos, omega, dt) {
-    const R = 0.02135 * 5;
-    this.ballGroup.position.set(pos.x, pos.z + R, -pos.y);
-    this.ballShadow.position.set(pos.x, 0.005, -pos.y);
-    this.ballShadow.material.opacity = Math.max(0.04, 0.28 - pos.z * 0.015);
+    const R = this.ballRadius || (0.02135 * 5);
+    const groundHeight = this.getTerrainHeight(pos.x, -pos.y);
+    const ballHeight = groundHeight + (pos.z - 0.02135) + R;
+
+    this.ballGroup.position.set(pos.x, ballHeight, -pos.y);
+    this.ballShadow.position.set(pos.x, groundHeight + 0.005, -pos.y);
+    this.ballShadow.material.opacity = Math.max(0.04, 0.28 - (pos.z - 0.02135) * 0.015);
     
     // Ensure flying ball is visible and tee ball is hidden
     this.ballGroup.visible = true;
@@ -1334,6 +1324,7 @@ export class GraphicsSystem {
     box.setFromObject(ballModel);
     box.getSize(size);
     box.getCenter(center);
+    this.ballRadius = Math.max(size.x, size.y, size.z) / 2;
 
     const ballWrapper = new THREE.Group();
     ballWrapper.add(ballModel);
@@ -1701,11 +1692,12 @@ export class GraphicsSystem {
   }
 
   positionBallAt(pos) {
-    const R = 0.02135 * 5;
+    const R = this.ballRadius || (0.02135 * 5);
+    const groundHeight = this.getTerrainHeight(pos.x, -pos.y);
     
     // Set ball group position in Three.js coordinates
-    this.ballGroup.position.set(pos.x, pos.z + R, -pos.y);
-    this.ballShadow.position.set(pos.x, 0.005, -pos.y);
+    this.ballGroup.position.set(pos.x, groundHeight + R, -pos.y);
+    this.ballShadow.position.set(pos.x, groundHeight + 0.005, -pos.y);
     
     const isStart = Math.hypot(pos.x, pos.y) < 0.01;
     if (isStart) {
@@ -1743,9 +1735,27 @@ export class GraphicsSystem {
     this.aimLine.visible = true;
   }
 
+  getTerrainHeight(xWorld, zWorld) {
+    const distFromFairway = Math.abs(zWorld);
+    if (distFromFairway < 40) return 0;
+    
+    // Convert world X to local terrain X by subtracting the 300m offset
+    const x = xWorld - 300;
+    const z = zWorld;
+    
+    let h = Math.sin(x * 0.004) * Math.cos(z * 0.005) * 25;
+    h += Math.sin(x * 0.01 + 2) * 8;
+    h += Math.cos(z * 0.006 + 1) * 10;
+    if (distFromFairway > 200) h += Math.max(0, Math.sin(x * 0.0024) * 45);
+    const blend = Math.min(1, (distFromFairway - 40) / 75);
+    return h * blend;
+  }
+
   resetBall() {
-    this.ballGroup.position.set(0, 0.02135 * 5, 0);
-    this.ballShadow.position.set(0, 0.005, 0);
+    const R = this.ballRadius || (0.02135 * 5);
+    const groundHeight = this.getTerrainHeight(0, 0);
+    this.ballGroup.position.set(0, groundHeight + R, 0);
+    this.ballShadow.position.set(0, groundHeight + 0.005, 0);
     this.ballMesh.rotation.set(0, 0, 0);
     
     // Hide the flying ball and show the tee ball again to prevent overlap
