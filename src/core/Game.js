@@ -3,7 +3,6 @@
 // ============================================================
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
 import { TerrainSettings, PhysicsSettings } from '../utils/Constants.js';
 import { RaycastUtils } from '../utils/RaycastUtils.js';
@@ -15,7 +14,8 @@ import { GolfClub } from '../entities/GolfClub.js';
 import { Hole } from '../entities/Hole.js';
 import { CameraController } from '../camera/CameraController.js';
 import { UIManager } from '../ui/UIManager.js';
-import { PhysicsEngine } from './PhysicsEngine.js';
+import { PhysicsEngine } from '../physics/PhysicsEngine.js';
+import { AssetLoader } from './AssetLoader.js';
 
 export class Game {
   constructor() {
@@ -40,6 +40,7 @@ export class Game {
     this.initAimLine();
     this.initLandingMarker();
     this.initTee();
+    this.assetLoader = new AssetLoader();
     this.loadAssets();
     this.initKeyboardListeners();
 
@@ -222,139 +223,146 @@ export class Game {
   }
 
   loadAssets() {
-    const manager = new THREE.LoadingManager();
     const progressBar = document.getElementById('progress-bar');
     const progressText = document.getElementById('progress-text');
     const loadingOverlay = document.getElementById('loading-overlay');
 
-    manager.onProgress = (url, itemsLoaded, itemsTotal) => {
+    const onProgress = (url, itemsLoaded, itemsTotal) => {
       const progress = Math.round((itemsLoaded / itemsTotal) * 100);
       if (progressBar) progressBar.style.width = `${progress}%`;
       if (progressText) progressText.textContent = `${progress}%`;
     };
 
-    manager.onLoad = () => {
+    const onLoad = () => {
       setTimeout(() => {
         if (loadingOverlay) {
           loadingOverlay.style.opacity = '0';
           loadingOverlay.style.visibility = 'hidden';
         }
       }, 500);
+
+      this.setupLoadedBall();
+      this.setupLoadedTee();
+      this.setupLoadedClub();
     };
 
-    const loader = new GLTFLoader(manager);
+    this.assetLoader.preload(onProgress, onLoad);
+  }
 
-    loader.load('Golf%20ball.glb', (gltf) => {
-      const ballModel = gltf.scene;
-      ballModel.updateMatrixWorld(true);
-      ballModel.traverse(node => {
-        if (node.isMesh) {
-          node.castShadow = true;
-          node.receiveShadow = true;
-          if (node.material) {
-            node.material.roughness = 0.35;
-            node.material.metalness = 0.05;
-          }
+  setupLoadedBall() {
+    const ballModel = this.assetLoader.get('ball');
+    if (!ballModel) return;
+
+    ballModel.updateMatrixWorld(true);
+    ballModel.traverse(node => {
+      if (node.isMesh) {
+        node.castShadow = true;
+        node.receiveShadow = true;
+        if (node.material) {
+          node.material.roughness = 0.35;
+          node.material.metalness = 0.05;
         }
-      });
-
-      const box = new THREE.Box3().setFromObject(ballModel);
-      const size = new THREE.Vector3();
-      box.getSize(size);
-      const targetDiameter = this.ball.radius * 2;
-      const maxExtent = Math.max(size.x, size.y, size.z);
-      const scaleFactor = targetDiameter / maxExtent;
-      ballModel.scale.set(scaleFactor, scaleFactor, scaleFactor);
-      ballModel.updateMatrixWorld(true);
-
-      box.setFromObject(ballModel);
-      const center = new THREE.Vector3();
-      box.getCenter(center);
-      ballModel.position.sub(center);
-      ballModel.updateMatrixWorld(true);
-
-      const ballWrapper = new THREE.Group();
-      ballWrapper.add(ballModel);
-      ballWrapper.updateMatrixWorld(true);
-
-      this.ball.setModel(ballWrapper, scaleFactor);
-
-      // Replace Tee Ball
-      this.teeGroup.remove(this.teeBall);
-      this.teeBall = ballWrapper.clone();
-      const teeHeight = this.loadedTeeHeight || 0.14;
-      this.teeBall.position.set(0, teeHeight - 0.01, 0);
-      this.teeGroup.add(this.teeBall);
-      this.teeBall.visible = true;
-    }, undefined, (err) => console.warn('Golf ball model load error:', err));
-
-    loader.load('Golf%20tee.glb', (gltf) => {
-      const teeModel = gltf.scene;
-      teeModel.updateMatrixWorld(true);
-      teeModel.traverse(node => {
-        if (node.isMesh) {
-          node.castShadow = true;
-          node.receiveShadow = true;
-        }
-      });
-
-      const box = new THREE.Box3().setFromObject(teeModel);
-      const size = new THREE.Vector3();
-      box.getSize(size);
-      const targetHeight = 0.20;
-      const scaleFactor = targetHeight / size.y;
-      teeModel.scale.set(scaleFactor, scaleFactor, scaleFactor);
-      teeModel.updateMatrixWorld(true);
-
-      box.setFromObject(teeModel);
-      teeModel.position.x = - (box.min.x + box.max.x) / 2;
-      teeModel.position.z = - (box.min.z + box.max.z) / 2;
-      teeModel.position.y = - box.min.y;
-      teeModel.updateMatrixWorld(true);
-
-      box.setFromObject(teeModel);
-      this.loadedTeeHeight = box.max.y;
-
-      if (this.proceduralTeeStand) this.teeGroup.remove(this.proceduralTeeStand);
-      if (this.proceduralTeeBase) this.teeGroup.remove(this.proceduralTeeBase);
-
-      this.teeGroup.add(teeModel);
-      if (this.teeBall) {
-        this.teeBall.position.y = this.loadedTeeHeight - 0.01;
       }
-    }, undefined, (err) => console.warn('Golf tee model load error:', err));
+    });
 
-    loader.load('Golf%20club.glb', (gltf) => {
-      const clubModel = gltf.scene;
-      clubModel.updateMatrixWorld(true);
-      clubModel.traverse(node => {
-        if (node.isMesh) {
-          node.castShadow = true;
-          node.receiveShadow = true;
-        }
-      });
+    const box = new THREE.Box3().setFromObject(ballModel);
+    const size = new THREE.Vector3();
+    box.getSize(size);
+    const targetDiameter = this.ball.radius * 2;
+    const maxExtent = Math.max(size.x, size.y, size.z);
+    const scaleFactor = targetDiameter / maxExtent;
+    ballModel.scale.set(scaleFactor, scaleFactor, scaleFactor);
+    ballModel.updateMatrixWorld(true);
 
-      const box = new THREE.Box3().setFromObject(clubModel);
-      const size = new THREE.Vector3();
-      box.getSize(size);
-      const targetHeight = 1.3;
-      const scaleFactor = targetHeight / size.y;
-      clubModel.scale.set(scaleFactor, scaleFactor, scaleFactor);
-      clubModel.updateMatrixWorld(true);
+    box.setFromObject(ballModel);
+    const center = new THREE.Vector3();
+    box.getCenter(center);
+    ballModel.position.sub(center);
+    ballModel.updateMatrixWorld(true);
 
-      box.setFromObject(clubModel);
-      clubModel.position.x = - (box.min.x + box.max.x) / 2;
-      clubModel.position.z = - (box.min.z + box.max.z) / 2;
-      clubModel.position.y = - box.max.y;
-      clubModel.updateMatrixWorld(true);
+    const ballWrapper = new THREE.Group();
+    ballWrapper.add(ballModel);
+    ballWrapper.updateMatrixWorld(true);
 
-      const R = PhysicsSettings.BALL_RADIUS * 5;
-      const ballMinX = -R;
-      const tempBox = new THREE.Box3().setFromObject(clubModel);
-      const clubMaxX = tempBox.max.x;
+    this.ball.setModel(ballWrapper, scaleFactor);
 
-      this.club.setModel(clubModel, targetHeight, clubMaxX);
-    }, undefined, (err) => console.warn('Golf club model load error:', err));
+    // Replace Tee Ball
+    this.teeGroup.remove(this.teeBall);
+    this.teeBall = ballWrapper.clone();
+    const teeHeight = this.loadedTeeHeight || 0.14;
+    this.teeBall.position.set(0, teeHeight - 0.01, 0);
+    this.teeGroup.add(this.teeBall);
+    this.teeBall.visible = true;
+  }
+
+  setupLoadedTee() {
+    const teeModel = this.assetLoader.get('tee');
+    if (!teeModel) return;
+
+    teeModel.updateMatrixWorld(true);
+    teeModel.traverse(node => {
+      if (node.isMesh) {
+        node.castShadow = true;
+        node.receiveShadow = true;
+      }
+    });
+
+    const box = new THREE.Box3().setFromObject(teeModel);
+    const size = new THREE.Vector3();
+    box.getSize(size);
+    const targetHeight = 0.20;
+    const scaleFactor = targetHeight / size.y;
+    teeModel.scale.set(scaleFactor, scaleFactor, scaleFactor);
+    teeModel.updateMatrixWorld(true);
+
+    box.setFromObject(teeModel);
+    teeModel.position.x = - (box.min.x + box.max.x) / 2;
+    teeModel.position.z = - (box.min.z + box.max.z) / 2;
+    teeModel.position.y = - box.min.y;
+    teeModel.updateMatrixWorld(true);
+
+    box.setFromObject(teeModel);
+    this.loadedTeeHeight = box.max.y;
+
+    if (this.proceduralTeeStand) this.teeGroup.remove(this.proceduralTeeStand);
+    if (this.proceduralTeeBase) this.teeGroup.remove(this.proceduralTeeBase);
+
+    this.teeGroup.add(teeModel);
+    if (this.teeBall) {
+      this.teeBall.position.y = this.loadedTeeHeight - 0.01;
+    }
+  }
+
+  setupLoadedClub() {
+    const clubModel = this.assetLoader.get('club');
+    if (!clubModel) return;
+
+    clubModel.updateMatrixWorld(true);
+    clubModel.traverse(node => {
+      if (node.isMesh) {
+        node.castShadow = true;
+        node.receiveShadow = true;
+      }
+    });
+
+    const box = new THREE.Box3().setFromObject(clubModel);
+    const size = new THREE.Vector3();
+    box.getSize(size);
+    const targetHeight = 1.3;
+    const scaleFactor = targetHeight / size.y;
+    clubModel.scale.set(scaleFactor, scaleFactor, scaleFactor);
+    clubModel.updateMatrixWorld(true);
+
+    box.setFromObject(clubModel);
+    clubModel.position.x = - (box.min.x + box.max.x) / 2;
+    clubModel.position.z = - (box.min.z + box.max.z) / 2;
+    clubModel.position.y = - box.max.y;
+    clubModel.updateMatrixWorld(true);
+
+    const tempBox = new THREE.Box3().setFromObject(clubModel);
+    const clubMaxX = tempBox.max.x;
+
+    this.club.setModel(clubModel, targetHeight, clubMaxX);
   }
 
   launchBall() {

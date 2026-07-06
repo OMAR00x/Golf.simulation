@@ -1,17 +1,23 @@
 // ============================================================
-// PhysicsEngine.js — Modular OOP Ball Physics Simulation
+// PhysicsEngine.js — Modular Ball Physics Simulation
 // ============================================================
-
 import { PhysicsSettings, TerrainSettings } from '../utils/Constants.js';
 
-// ── Air Density (temperature + altitude) ────────────────────
+/**
+ * Calculates air density based on temperature and altitude.
+ * @param {number} tempC - Temperature in degrees Celsius.
+ * @param {number} altitude - Altitude in meters.
+ * @returns {number} Air density in kg/m^3.
+ */
 export function calcAirDensity(tempC, altitude) {
   const T0 = 288.15;
   const T  = tempC + 273.15;
   return 1.225 * (T0 / T) * Math.exp(-0.000118 * altitude);
 }
 
-// ── Reynolds Number -> Drag Coefficient (Dimpled Golf Ball) ──
+/**
+ * Calculates the dynamic drag coefficient of a dimpled golf ball.
+ */
 function dynamicCd(vel, rho) {
   const speed = Math.hypot(vel.x, vel.y, vel.z);
   const Re    = (rho * speed * 2 * PhysicsSettings.BALL_RADIUS) / 1.81e-5;
@@ -20,7 +26,9 @@ function dynamicCd(vel, rho) {
   return 0.22;
 }
 
-// ── Lift Coefficient from Spin Ratio ────────────────────────
+/**
+ * Calculates the lift coefficient from the spin ratio.
+ */
 function liftCoeff(spinRatio) {
   if (spinRatio < 0.05) return 0;
   if (spinRatio > 0.50) return 0.30;
@@ -29,7 +37,9 @@ function liftCoeff(spinRatio) {
   return 0.15 + 0.30 * Math.exp(-(spinRatio - peak) * 3);
 }
 
-// ── Acceleration and Spin Derivatives ───────────────────────
+/**
+ * Computes the total linear acceleration and spin decay derivatives.
+ */
 function computeAccel(vel, omega, rho, wind) {
   const rv = { x: vel.x - wind.x, y: vel.y - wind.y, z: vel.z - wind.z };
   const speed = Math.hypot(rv.x, rv.y, rv.z);
@@ -68,7 +78,9 @@ function computeAccel(vel, omega, rho, wind) {
   return { ax, ay, az, dOmX, dOmY, dOmZ };
 }
 
-// ── Runge-Kutta 4th Order Integration (RK4) ──────────────────
+/**
+ * Performs a single Runge-Kutta 4th-order integration step.
+ */
 function rk4Step(state, dt, rho, wind) {
   const { pos, vel, omega } = state;
 
@@ -80,7 +92,7 @@ function rk4Step(state, dt, rho, wind) {
 
   const k1 = deriv(vel, omega);
 
-  const v2  = { x: vel.x + .5*dt*k1.ax,   y: vel.y + .5*dt*k1.ay,   z: vel.z + .5*dt*k1.az   };
+  const v2  = { x: vel.x + .5*dt*k1.ax,   y: vel.y + .5*dt*k1.az,   z: vel.z + .5*dt*k1.az   };
   const om2 = { x: omega.x+.5*dt*k1.dOmX, y: omega.y+.5*dt*k1.dOmY, z: omega.z+.5*dt*k1.dOmZ };
   const k2  = deriv(v2, om2);
 
@@ -112,7 +124,9 @@ function rk4Step(state, dt, rho, wind) {
   };
 }
 
-// ── Initial Launch State ─────────────────────────────────────
+/**
+ * Computes the initial launch state vector based on player shot options.
+ */
 export function calcInitialState(p, startPos, clubForward) {
   const { v0, thetaDeg, phiDeg, backspinRPM, sidespinRPM } = p;
   const bs     = (backspinRPM  * 2 * Math.PI) / 60;
@@ -165,6 +179,9 @@ export class PhysicsEngine {
     this.landingPoint = null;
   }
 
+  /**
+   * Advances the rolling state of the ball, factoring in slope vectors and friction.
+   */
   rollingStepOnSlope(state, dt, groundInfo) {
     const { pos, vel } = state;
     const speed = Math.hypot(vel.x, vel.y);
@@ -237,6 +254,9 @@ export class PhysicsEngine {
     };
   }
 
+  /**
+   * Advances the ball physics state by a single time step.
+   */
   step(dt) {
     if (this.phase === 'stopped') return;
 
@@ -363,6 +383,9 @@ export class PhysicsEngine {
     }
   }
 
+  /**
+   * Advances the simulation using substeps.
+   */
   update(deltaTime) {
     if (this.phase === 'stopped') return;
     const dt      = PhysicsSettings.TIME_STEP;
@@ -375,6 +398,9 @@ export class PhysicsEngine {
     }
   }
 
+  /**
+   * Returns telemetry stats for display panel.
+   */
   getStats() {
     let maxH = 0, apexDist = 0;
     for (const p of this.trajectory) {
