@@ -42,19 +42,12 @@ export class UIManager {
       victoryOverlay: document.getElementById('victory-overlay'),
       victoryStrokes: document.getElementById('victory-strokes'),
       victoryRestartBtn: document.getElementById('victory-restart-btn'),
-      chartContainer: document.getElementById('chart-container'),
-      toggleChartBtn: document.getElementById('toggle-chart-btn'),
     };
 
-    this.chartInstance = null;
-    this.chartLabels = [];
-    this.chartAltData = [];
-    this.chartVelData = [];
     this.activeParam = 'power';
     this.audioCtx = null;
 
     this.initListeners();
-    this.initChart();
     this.updateActiveParamVisuals('power');
   }
 
@@ -71,12 +64,7 @@ export class UIManager {
       this.game.resetGame();
     });
 
-    if (this.ui.toggleChartBtn && this.ui.chartContainer) {
-      this.ui.toggleChartBtn.addEventListener('click', () => {
-        const isCollapsed = this.ui.chartContainer.classList.toggle('collapsed');
-        this.ui.toggleChartBtn.textContent = isCollapsed ? 'Maximize' : 'Minimize';
-      });
-    }
+
 
     // camera mode clicks
     [this.ui.camDefault, this.ui.camTop, this.ui.camPlayer, this.ui.camFollow, this.ui.camFree, this.ui.camCinematic].forEach(btn => {
@@ -139,34 +127,7 @@ export class UIManager {
     } catch (e) { }
   }
 
-  initChart() {
-    const ctx = document.getElementById('physicsChart').getContext('2d');
-    if (this.chartInstance) this.chartInstance.destroy();
-    this.chartLabels = [0];
-    this.chartAltData = [0];
-    this.chartVelData = [0];
-    this.chartInstance = new Chart(ctx, {
-      type: 'line',
-      data: {
-        labels: this.chartLabels,
-        datasets: [
-          { label: 'Altitude (m)', data: this.chartAltData, borderColor: '#ffaa00', backgroundColor: 'rgba(255,170,0,0.08)',
-            yAxisID: 'y-alt', borderWidth: 2, pointRadius: 0, fill: true },
-          { label: 'Speed (m/s)', data: this.chartVelData, borderColor: '#00ffcc', backgroundColor: 'rgba(0,255,200,0.06)',
-            yAxisID: 'y-vel', borderWidth: 2, pointRadius: 0, fill: true },
-        ],
-      },
-      options: {
-        responsive: true, maintainAspectRatio: false, animation: false,
-        scales: {
-          x: { title: { display: true, text: 'Time (s)', font: { size: 10 } }, ticks: { maxTicksLimit: 8 } },
-          'y-alt': { type: 'linear', position: 'right', title: { display: true, text: 'Altitude', color: '#ffaa00', font: { size: 10 } }, grid: { color: 'rgba(255,170,0,0.08)' } },
-          'y-vel': { type: 'linear', position: 'left', title: { display: true, text: 'Speed', color: '#00ffcc', font: { size: 10 } }, grid: { color: 'rgba(0,255,200,0.06)' } },
-        },
-        plugins: { legend: { labels: { boxWidth: 10, font: { size: 10 } } } },
-      },
-    });
-  }
+
 
   updateHUD(state) {
     const speed = Math.hypot(state.vel.x, state.vel.y, state.vel.z);
@@ -316,10 +277,6 @@ export class UIManager {
   }
 
   dispose() {
-    if (this.chartInstance) {
-      this.chartInstance.destroy();
-      this.chartInstance = null;
-    }
     if (this.audioCtx) {
       this.audioCtx.close();
       this.audioCtx = null;

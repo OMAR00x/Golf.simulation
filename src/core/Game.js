@@ -399,7 +399,6 @@ export class Game {
         this.club.group.visible = false;
 
         this.clearTrajectory();
-        this.uiManager.initChart();
         this.uiManager.hideStats();
         this.uiManager.setStatus(`Stroke ${this.strokes}`, '#ffaa00');
         this.uiManager.updateGroundUI(params.groundType);
@@ -429,7 +428,6 @@ export class Game {
     this.cameraController.mode = 'player';
     this.uiManager.updateCamButtons('player');
     this.uiManager.hideVictory();
-    this.uiManager.initChart();
 
     this.uiManager.ui.dashAlt.textContent = '0.00';
     this.uiManager.ui.dashVel.textContent = '0.00';
@@ -641,12 +639,7 @@ export class Game {
         this.updateLandingMarker(this.engine.landingPoint);
       }
 
-      if (this.frameCount % 3 === 0) {
-        this.uiManager.chartLabels.push(this.engine.time.toFixed(2));
-        this.uiManager.chartAltData.push(+state.pos.z.toFixed(3));
-        this.uiManager.chartVelData.push(+speed.toFixed(3));
-        this.uiManager.chartInstance.update('none');
-      }
+
 
       if (this.engine.bounces > this.lastBounceCount) {
         this.uiManager.playSound('bounce');
@@ -660,7 +653,6 @@ export class Game {
 
       if (this.engine.phase === 'stopped') {
         this.running = false;
-        this.uiManager.chartInstance.update();
 
         this.currentBallPos = { x: state.pos.x, y: state.pos.y, z: state.pos.z };
 
