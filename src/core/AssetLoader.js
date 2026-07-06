@@ -1,6 +1,4 @@
-// ============================================================
-// AssetLoader.js — Preloading and Caching of GLTF Assets
-// ============================================================
+import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
 export class AssetLoader {
