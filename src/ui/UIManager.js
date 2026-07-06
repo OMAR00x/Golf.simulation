@@ -42,6 +42,8 @@ export class UIManager {
       victoryOverlay: document.getElementById('victory-overlay'),
       victoryStrokes: document.getElementById('victory-strokes'),
       victoryRestartBtn: document.getElementById('victory-restart-btn'),
+      chartContainer: document.getElementById('chart-container'),
+      toggleChartBtn: document.getElementById('toggle-chart-btn'),
     };
 
     this.chartInstance = null;
@@ -68,6 +70,13 @@ export class UIManager {
     this.ui.victoryRestartBtn.addEventListener('click', () => {
       this.game.resetGame();
     });
+
+    if (this.ui.toggleChartBtn && this.ui.chartContainer) {
+      this.ui.toggleChartBtn.addEventListener('click', () => {
+        const isCollapsed = this.ui.chartContainer.classList.toggle('collapsed');
+        this.ui.toggleChartBtn.textContent = isCollapsed ? 'Maximize' : 'Minimize';
+      });
+    }
 
     // camera mode clicks
     [this.ui.camDefault, this.ui.camTop, this.ui.camPlayer, this.ui.camFollow, this.ui.camFree, this.ui.camCinematic].forEach(btn => {
