@@ -1,6 +1,3 @@
-// ============================================================
-// Lighting.js — Environment Lighting & Atmospheric Effects Class
-// ============================================================
 import * as THREE from 'three';
 
 export class Lighting {
@@ -18,7 +15,7 @@ export class Lighting {
   }
 
   build() {
-    // 1. Lighting Setup
+
     this.scene.background = new THREE.Color(0x87CEEB);
     this.scene.fog = new THREE.FogExp2(0xB0E0E6, 0.0012);
 
@@ -42,7 +39,6 @@ export class Lighting {
     this.hemiLight = new THREE.HemisphereLight(0x87ceeb, 0x4a7c3f, 0.5);
     this.scene.add(this.hemiLight);
 
-    // 2. Sky Dome
     const skyGeo = new THREE.SphereGeometry(1500, 32, 32);
     const skyMat = new THREE.MeshBasicMaterial({
       color: 0x87CEEB,
@@ -52,14 +48,12 @@ export class Lighting {
     this.skyDome = new THREE.Mesh(skyGeo, skyMat);
     this.scene.add(this.skyDome);
 
-    // Sun Visual Sphere
     const sunGeo = new THREE.SphereGeometry(15, 32, 32);
     const sunMat = new THREE.MeshBasicMaterial({ color: 0xFFF8DC, fog: false });
     this.sunMesh = new THREE.Mesh(sunGeo, sunMat);
     this.sunMesh.position.set(300, 250, -200);
     this.scene.add(this.sunMesh);
 
-    // Sun Halos
     for (let i = 1; i <= 3; i++) {
       const haloGeo = new THREE.SphereGeometry(15 + i * 8, 32, 32);
       const haloMat = new THREE.MeshBasicMaterial({ 
@@ -74,7 +68,6 @@ export class Lighting {
       this.halos.push(halo);
     }
 
-    // Clouds
     const cloudPositions = [
       [[40, 180, 80], 2.0], [[90, 200, 120], 1.5], [[160, 170, 90], 2.2],
       [[-30, 190, 150], 1.3], [[220, 210, 100], 1.8], [[70, 185, -80], 1.1],
@@ -88,7 +81,6 @@ export class Lighting {
       this.clouds.push(g);
     });
 
-    // Rainbow
     const rainbowGeo = new THREE.TorusGeometry(800, 15, 2, 64, Math.PI);
     const rainbowMat = new THREE.MeshBasicMaterial({
       color: 0x88CCFF,

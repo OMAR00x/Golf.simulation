@@ -1,6 +1,3 @@
-// ============================================================
-// RaycastUtils.js — Ground Height Raycasting Utility
-// ============================================================
 import * as THREE from 'three';
 
 export class RaycastUtils {
@@ -18,10 +15,10 @@ export class RaycastUtils {
 
     let targets = [];
     if (x >= -750 && x <= 1750 && z >= -90 && z <= 90) {
-      // Fairway play zone: raycast green, bunkers, and fairway meshes (omit giant roughMesh)
+
       targets = this.groundMeshes ? this.groundMeshes.filter(m => m && m.name !== 'roughMesh') : [];
     } else {
-      // Rough zone: raycast against roughMesh only
+
       targets = this.groundMeshes ? this.groundMeshes.filter(m => m && m.name === 'roughMesh') : [];
     }
 

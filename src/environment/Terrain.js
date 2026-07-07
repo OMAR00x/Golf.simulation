@@ -1,6 +1,3 @@
-// ============================================================
-// Terrain.js — Golf Course Terrain & Decorative Environment Class
-// ============================================================
 import * as THREE from 'three';
 import { TerrainSettings } from '../utils/Constants.js';
 
@@ -27,10 +24,10 @@ export class Terrain {
     const ctx = canvas.getContext('2d');
 
     if (type === 'rough') {
-      // 🌿 Rough grass
+
       ctx.fillStyle = '#3a662f';
       ctx.fillRect(0, 0, 512, 512);
-      // Draw grass clumps/noise
+
       for (let i = 0; i < 30000; i++) {
         const x = Math.random() * 512;
         const y = Math.random() * 512;
@@ -45,14 +42,14 @@ export class Terrain {
         ctx.stroke();
       }
     } else if (type === 'fairway') {
-      // ⛳ Fairway grass (lighter, cleaner, striped look)
+
       ctx.fillStyle = '#4c8c3f';
       ctx.fillRect(0, 0, 512, 512);
       ctx.fillStyle = '#437c37';
       for (let i = 0; i < 512; i += 64) {
         ctx.fillRect(i, 0, 32, 512);
       }
-      // Add subtle noise
+
       for (let i = 0; i < 5000; i++) {
         const x = Math.random() * 512;
         const y = Math.random() * 512;
@@ -60,10 +57,10 @@ export class Terrain {
         ctx.fillRect(x, y, 2, 2);
       }
     } else if (type === 'green') {
-      // 🟢 Putting Green (ultra short grass, rich green)
+
       ctx.fillStyle = '#2d6d35';
       ctx.fillRect(0, 0, 512, 512);
-      // Soft checker pattern
+
       ctx.fillStyle = '#265c2c';
       for (let x = 0; x < 512; x += 32) {
         for (let y = 0; y < 512; y += 32) {
@@ -73,10 +70,10 @@ export class Terrain {
         }
       }
     } else if (type === 'sand') {
-      // 🏖️ Sand
+
       ctx.fillStyle = '#e8d4a7';
       ctx.fillRect(0, 0, 512, 512);
-      // Speckles
+
       for (let i = 0; i < 8000; i++) {
         const x = Math.random() * 512;
         const y = Math.random() * 512;
@@ -84,7 +81,7 @@ export class Terrain {
         ctx.fillRect(x, y, 1.5, 1.5);
       }
     } else if (type === 'path') {
-      // 🧳 Dirt/Gravel path
+
       ctx.fillStyle = '#8b7d6b';
       ctx.fillRect(0, 0, 512, 512);
       for (let i = 0; i < 15000; i++) {
@@ -114,7 +111,6 @@ export class Terrain {
   build() {
     const HOLE_X = TerrainSettings.HOLE_X;
 
-    // --- Flat Rough ---
     const roughGeo = new THREE.PlaneGeometry(
       TerrainSettings.ROUGH_SIZE_X,
       TerrainSettings.ROUGH_SIZE_Z,
@@ -134,12 +130,11 @@ export class Terrain {
       new THREE.MeshStandardMaterial({ map: roughTexture, color: 0xffffff, roughness: 0.8 }));
     roughMesh.name = 'roughMesh';
     roughMesh.rotation.x    = -Math.PI / 2;
-    roughMesh.position.set(300, 0, 0); // centered at 300
+    roughMesh.position.set(300, 0, 0); 
     roughMesh.receiveShadow = true;
     this.scene.add(roughMesh);
     this.groundMeshes.push(roughMesh);
 
-    // --- Deformed Fairway conforming to terrain ---
     const fairwayGeo = new THREE.PlaneGeometry(
       TerrainSettings.FAIRWAY_SIZE_X,
       TerrainSettings.FAIRWAY_SIZE_Z,
@@ -153,7 +148,7 @@ export class Terrain {
       const worldX = localX + 500;
       const worldZ = localY;
       const h = this.getTerrainHeight(worldX, worldZ);
-      fairwayPos.setZ(i, h + 0.002); // slightly above rough to prevent z-fighting
+      fairwayPos.setZ(i, h + 0.002); 
     }
     fairwayGeo.computeVertexNormals();
     const fairwayTexture = this._createProceduralTexture('fairway');
@@ -171,7 +166,6 @@ export class Terrain {
     this.scene.add(fairway);
     this.groundMeshes.push(fairway);
 
-    // --- Putting Green ---
     const greenGeo = new THREE.CircleGeometry(18, 64);
     const greenTexture = this._createProceduralTexture('green');
     greenTexture.repeat.set(18, 18);
@@ -184,7 +178,6 @@ export class Terrain {
     this.scene.add(greenMesh);
     this.groundMeshes.push(greenMesh);
 
-    // --- Distance Markers ---
     [50, 100, 150, 200, 250, 300, 350, 400, 450, 500, 550, 600].forEach(d => {
       const terrainH = this.getTerrainHeight(d, 42);
       const post = new THREE.Mesh(
@@ -208,7 +201,6 @@ export class Terrain {
       this.scene.add(line);
     });
 
-    // --- Sand Bunkers ---
     [[180, 0, -42], [270, 0, 42], [120, 0, -48], [380, 0, -42]].forEach(([bx, by, bz]) => {
       const terrainH = this.getTerrainHeight(bx, bz);
       const bunkerGeo = new THREE.CylinderGeometry(12, 14, 0.3, 24);
@@ -235,7 +227,6 @@ export class Terrain {
       this.scene.add(edge);
     });
 
-    // --- Deformed Foot Path conforming to terrain ---
     const pathGeo = new THREE.PlaneGeometry(
       TerrainSettings.PATH_SIZE_X,
       TerrainSettings.PATH_SIZE_Z,
@@ -249,7 +240,7 @@ export class Terrain {
       const worldX = localX + 500;
       const worldZ = localY + 55;
       const h = this.getTerrainHeight(worldX, worldZ);
-      pathPos.setZ(i, h + 0.003); // slightly above rough to prevent z-fighting
+      pathPos.setZ(i, h + 0.003); 
     }
     pathGeo.computeVertexNormals();
     const pathTexture = this._createProceduralTexture('path');
@@ -266,20 +257,19 @@ export class Terrain {
     this.scene.add(path);
     this.groundMeshes.push(path);
 
-    // Update matrixWorld for all ground meshes
     this.groundMeshes.forEach(mesh => {
       if (mesh) mesh.updateMatrixWorld(true);
     });
   }
 
   buildDecorativeEnvironment() {
-    // 1. Distant mountains
+
     const mountainMat = new THREE.MeshStandardMaterial({ 
       color: 0x5a6b5c, 
       roughness: 0.95,
       fog: false
     });
-    
+
     for (let i = 0; i < 20; i++) {
       const h = 100 + Math.random() * 150;
       const w = 80 + Math.random() * 100;
@@ -295,8 +285,7 @@ export class Terrain {
       mountain.castShadow = true;
       mountain.receiveShadow = true;
       this.scene.add(mountain);
-      
-      // Snow Cap
+
       const snowCap = new THREE.Mesh(
         new THREE.ConeGeometry(w * 0.3, h * 0.25, 8),
         new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.3, fog: false })
@@ -312,7 +301,6 @@ export class Terrain {
       this.scene.add(snowCap);
     }
 
-    // 2. Distant Lake & Island
     const lakeGeo = new THREE.CircleGeometry(120, 64);
     const lakeMat = new THREE.MeshStandardMaterial({
       color: 0x4a90a4,
@@ -334,12 +322,10 @@ export class Terrain {
     this.scene.add(island);
     this.groundMeshes.push(island);
 
-    // Tree on the island
     const islandTree = this._makeLowPolyTree(0.8);
     this.scene.add(islandTree);
     this._alignObjectToTerrain(islandTree, -250, 200);
 
-    // 3. Surrounding Distant Trees
     for (let i = 0; i < 50; i++) {
       const tree = this._makeLowPolyTree(0.6 + Math.random() * 0.4);
       const angle = Math.random() * Math.PI * 2;
@@ -350,7 +336,6 @@ export class Terrain {
       this._alignObjectToTerrain(tree, x, z);
     }
 
-    // 4. Flying Birds
     for (let i = 0; i < 12; i++) {
       const bird = this._makeBird();
       bird.position.set(
@@ -370,7 +355,6 @@ export class Terrain {
       this.scene.add(bird);
     }
 
-    // 5. Lamp Posts
     for (let i = 0; i < 8; i++) {
       const lamp = this._makeLamp();
       const lx = i * 25;
@@ -380,7 +364,6 @@ export class Terrain {
       this.scene.add(lamp);
     }
 
-    // 6. Wooden Fences
     for (let i = 0; i < 30; i++) {
       const fence = this._makeFence();
       const fx = i * 8 - 20;
@@ -391,7 +374,6 @@ export class Terrain {
       this.scene.add(fence);
     }
 
-    // 7. Windsock Windsock
     this.windIndicator = new THREE.Group();
     const pole = new THREE.Mesh(
       new THREE.CylinderGeometry(0.05, 0.05, 4, 8),
@@ -548,20 +530,19 @@ export class Terrain {
   }
 
   update(time, dt) {
-    // 1. Circling Birds
+
     this.birds.forEach(bird => {
       bird.angle += bird.speed * dt * 0.3;
       bird.mesh.position.x = bird.centerX + Math.cos(bird.angle) * bird.radius;
       bird.mesh.position.z = bird.centerZ + Math.sin(bird.angle) * bird.radius;
       bird.mesh.rotation.y = -bird.angle + Math.PI / 2;
-      
+
       const wingSpeed = 8;
       const wingAngle = Math.sin(time * wingSpeed) * 0.5;
       bird.mesh.userData.leftWing.rotation.z = wingAngle;
       bird.mesh.userData.rightWing.rotation.z = -wingAngle;
     });
 
-    // 2. Windsock wave
     if (this.windFlag) {
       const positions = this.windFlag.geometry.attributes.position;
       for (let i = 0; i < positions.count; i++) {
@@ -574,7 +555,7 @@ export class Terrain {
   }
 
   dispose() {
-    // Call super dispose
+
     this.groundMeshes.forEach(mesh => {
       if (mesh) {
         if (mesh.geometry) mesh.geometry.dispose();

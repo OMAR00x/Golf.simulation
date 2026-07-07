@@ -1,6 +1,3 @@
-// ============================================================
-// GolfBall.js — Golf Ball Entity Class
-// ============================================================
 import * as THREE from 'three';
 import { PhysicsSettings } from '../utils/Constants.js';
 
@@ -8,18 +5,15 @@ export class GolfBall {
   constructor(scene, raycastUtils) {
     this.scene = scene;
     this.raycastUtils = raycastUtils;
-    this.radius = PhysicsSettings.BALL_RADIUS * 5; // Scaled up 5x visually for visibility
+    this.radius = PhysicsSettings.BALL_RADIUS * 5; 
 
-    // Group holding the ball mesh and relative pivots
     this.group = new THREE.Group();
     this.group.visible = false;
     this.scene.add(this.group);
 
-    // Visual model wrapper inside group
     this.mesh = new THREE.Group();
     this.group.add(this.mesh);
 
-    // Fallback procedural sphere before GLB is loaded
     const fallbackGeo = new THREE.SphereGeometry(this.radius, 16, 16);
     const fallbackMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.35 });
     this.fallbackMesh = new THREE.Mesh(fallbackGeo, fallbackMat);
@@ -27,7 +21,6 @@ export class GolfBall {
     this.fallbackMesh.receiveShadow = true;
     this.mesh.add(this.fallbackMesh);
 
-    // Flat black shadow circle projected under the ball
     this.shadow = new THREE.Mesh(
       new THREE.CircleGeometry(this.radius * 1.7, 32),
       new THREE.MeshBasicMaterial({ 
@@ -54,7 +47,6 @@ export class GolfBall {
 
     this.mesh.add(ballWrapper);
 
-    // Calculate actual visual radius from the loaded model
     const box = new THREE.Box3().setFromObject(ballWrapper);
     const size = new THREE.Vector3();
     box.getSize(size);
@@ -69,13 +61,11 @@ export class GolfBall {
     this.group.position.set(pos.x, ballHeight, -pos.y);
     this.group.visible = true;
 
-    // Follow ground height exactly
     this.shadow.position.set(pos.x, groundHeight + 0.005, -pos.y);
-    // Decrease opacity as it goes higher
+
     const hAbove = pos.z - groundHeight - PhysicsSettings.BALL_RADIUS;
     this.shadow.material.opacity = Math.max(0.04, 0.28 - hAbove * 0.015);
 
-    // Apply spin/roll rotation
     if (omega) {
       this.mesh.rotation.x += omega.x * dt;
       this.mesh.rotation.y += omega.y * dt;
@@ -92,7 +82,7 @@ export class GolfBall {
 
     const isStart = Math.hypot(pos.x, pos.y) < 0.01;
     if (isStart) {
-      this.group.visible = false; // Let TeeBall draw instead
+      this.group.visible = false; 
     } else {
       this.group.visible = true;
     }
@@ -117,7 +107,7 @@ export class GolfBall {
       }
     });
     this.scene.remove(this.group);
-    
+
     if (this.shadow) {
       this.shadow.geometry.dispose();
       this.shadow.material.dispose();

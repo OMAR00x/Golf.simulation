@@ -1,7 +1,3 @@
-// ============================================================
-// MathUtils.js — General Mathematics Helper Functions
-// ============================================================
-
 export function degreesToRadians(deg) {
   return deg * Math.PI / 180;
 }

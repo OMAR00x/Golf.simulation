@@ -1,6 +1,3 @@
-// ============================================================
-// Game.js — Main OOP Application Loop & Coordination Class (FIXED)
-// ============================================================
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
@@ -21,7 +18,7 @@ export class Game {
   constructor() {
     this.container = document.getElementById('canvas-container');
     this.scene = new THREE.Scene();
-    
+
     this.running = false;
     this.engine = null;
     this.strokes = 0;
@@ -51,8 +48,7 @@ export class Game {
   initKeyboardListeners() {
     this._gameKeydownHandler = (e) => {
       const key = e.key.toLowerCase();
-      
-      // Select Parameter Hotkeys
+
       if (key === 'p') {
         this.uiManager.updateActiveParamVisuals('power');
         e.preventDefault();
@@ -63,8 +59,7 @@ export class Game {
         this.uiManager.updateActiveParamVisuals('spin');
         e.preventDefault();
       }
-      
-      // Camera Shortcuts (1: Default, 2: Top, 3: Behind Ball, 4: Follow, 5: Free, 6: Cinematic)
+
       if (e.key === '1') {
         this.setCameraMode('default');
       } else if (e.key === '2') {
@@ -78,17 +73,15 @@ export class Game {
       } else if (e.key === '6') {
         this.setCameraMode('cinematic');
       }
-      
-      // R Key to Restart
+
       if (key === 'r') {
         this.resetGame();
         e.preventDefault();
       }
-      
-      // Arrow Key Parameter Adjustment
+
       if (!this.running && !this.holeComplete) {
         const shiftPressed = e.shiftKey;
-        
+
         if (e.key === 'ArrowUp') {
           this.uiManager.adjustParameter(this.uiManager.activeParam, true, false, shiftPressed);
           e.preventDefault();
@@ -130,20 +123,17 @@ export class Game {
   }
 
   initEntities() {
-    // 1. Terrain & Raycaster
+
     this.terrain = new Terrain(this.scene);
     this.raycastUtils = new RaycastUtils(this.terrain.groundMeshes, (x, z) => this.terrain.getTerrainHeight(x, z));
 
-    // 2. Atmosphere
     this.lighting = new Lighting(this.scene);
     this.treeManager = new TreeManager(this.scene, this.raycastUtils);
 
-    // 3. Game Objects
     this.ball = new GolfBall(this.scene, this.raycastUtils);
     this.club = new GolfClub(this.scene, this.raycastUtils);
     this.hole = new Hole(this.scene, this.terrain);
 
-    // 4. Controllers
     this.cameraController = new CameraController(this.camera, this.controls, this.raycastUtils);
     this.uiManager = new UIManager(this);
   }
@@ -151,7 +141,6 @@ export class Game {
   initTee() {
     this.teeGroup = new THREE.Group();
 
-    // Tee Base rings
     const line1 = new THREE.Mesh(
       new THREE.RingGeometry(0.5, 0.55, 32),
       new THREE.MeshStandardMaterial({ color: 0xffffff, transparent: true, opacity: 0.6 })
@@ -168,7 +157,6 @@ export class Game {
     line2.position.y = 0.085;
     this.teeGroup.add(line2);
 
-    // Red Tee Marker
     const marker = new THREE.Mesh(
       new THREE.CylinderGeometry(0.04, 0.04, 0.15, 8),
       new THREE.MeshStandardMaterial({ color: 0xff0000, emissive: 0xff0000, emissiveIntensity: 0.3 })
@@ -176,7 +164,6 @@ export class Game {
     marker.position.y = 0.15;
     this.teeGroup.add(marker);
 
-    // Fallback Tee Peg
     this.proceduralTeeBase = new THREE.Mesh(
       new THREE.CylinderGeometry(0.05, 0.07, 0.06, 16),
       new THREE.MeshStandardMaterial({ color: 0xcccccc, roughness: 0.5 })
@@ -191,7 +178,6 @@ export class Game {
     this.proceduralTeeStand.position.y = 0.07;
     this.teeGroup.add(this.proceduralTeeStand);
 
-    // Tee Ball
     this.teeBall = this.ball.fallbackMesh.clone();
     this.teeBall.position.set(0, 0.14, 0);
     this.teeGroup.add(this.teeBall);
@@ -204,7 +190,6 @@ export class Game {
     this.aimLine = new THREE.Line(new THREE.BufferGeometry(), this.aimMat);
     this.scene.add(this.aimLine);
 
-    // Trajectory Line
     this.trajMat = new THREE.LineBasicMaterial({ vertexColors: true, linewidth: 2 });
     this.trajGeo = new THREE.BufferGeometry();
     this.trajLine = new THREE.Line(this.trajGeo, this.trajMat);
@@ -286,7 +271,6 @@ export class Game {
 
     this.ball.setModel(ballWrapper, scaleFactor);
 
-    // Replace Tee Ball
     this.teeGroup.remove(this.teeBall);
     this.teeBall = ballWrapper.clone();
     const teeHeight = this.loadedTeeHeight || 0.14;
@@ -410,7 +394,6 @@ export class Game {
     );
   }
 
-  // ✅ FIX: Added theta to club positioning
   resetGame() {
     this.running = false;
     this.engine = null;
@@ -423,9 +406,9 @@ export class Game {
     this.club.updatePositionAndAim(
         this.currentBallPos, 
         parseFloat(this.uiManager.ui.phi.value),
-        parseFloat(this.uiManager.ui.theta.value)  // ✅ ADD theta
+        parseFloat(this.uiManager.ui.theta.value)  
     );
-    
+
     if (this.teeBall) {
       this.teeBall.visible = true;
     }
@@ -450,17 +433,16 @@ export class Game {
     this.uiManager.updateCamButtons(mode);
   }
 
-  // ✅ FIX: Added theta to club positioning and aim line update
   onParamAdjust(param, val) {
     if (!this.running && !this.holeComplete) {
       if (param === 'aim') {
         this.club.updatePositionAndAim(
             this.currentBallPos, 
             val,
-            parseFloat(this.uiManager.ui.theta.value)  // ✅ ADD theta
+            parseFloat(this.uiManager.ui.theta.value)  
         );
       }
-      // ✅ FIX: Update aim line for ANY parameter change
+
       this.updateAimLine(
         this.currentBallPos, 
         parseFloat(this.uiManager.ui.phi.value), 
@@ -469,14 +451,12 @@ export class Game {
     }
   }
 
-  // ✅ FIX: Calculate direction directly from input angles, NOT from club mesh
   updateAimLine(pos, phiDeg, thetaDeg) {
     if (!this.aimLine) return;
     const R = PhysicsSettings.BALL_RADIUS * 5;
     const ballVec = new THREE.Vector3(pos.x, pos.z - PhysicsSettings.BALL_RADIUS + R, -pos.y);
     this.aimLine.position.copy(ballVec);
 
-    // Calculate direction directly from input angles
     const thetaR = thetaDeg * Math.PI / 180;
     const phiR = phiDeg * Math.PI / 180;
     const length = 15;
@@ -557,9 +537,9 @@ export class Game {
     const geo = new THREE.BufferGeometry();
     const positions = new Float32Array(count * 3);
     const velocities = [];
-    
+
     const alignedY = pos.z - PhysicsSettings.BALL_RADIUS;
-    
+
     for (let i = 0; i < count; i++) {
       positions[i*3] = pos.x;
       positions[i*3+1] = alignedY;
@@ -571,7 +551,7 @@ export class Game {
         life: 1.0
       });
     }
-    
+
     geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
     const mat = new THREE.PointsMaterial({ 
       color: 0x8B4513, 
@@ -599,7 +579,7 @@ export class Game {
       const positions = p.mesh.geometry.attributes.position.array;
       for (let j = 0; j < p.velocities.length; j++) {
         const vel = p.velocities[j];
-        vel.y -= 9.81 * dt; // gravity
+        vel.y -= 9.81 * dt; 
         positions[j*3] += vel.x * dt;
         positions[j*3+1] += vel.y * dt;
         positions[j*3+2] += vel.z * dt;
@@ -615,23 +595,18 @@ export class Game {
     const delta = Math.min((now - this.lastTime) / 1000, 0.05);
     this.lastTime = now;
 
-    // 1. Static environment animations
     this.terrain.update(this.time, delta);
-    
-    // 2. Club swing update
+
     this.club.update(delta);
-    
-    // 3. Flags and animations
+
     this.hole.update(this.time);
-    
-    // 4. Particle systems
+
     this.updateParticles(delta);
 
     if (this.running && this.engine) {
       this.engine.update(delta);
       const state = this.engine.state;
 
-      // Diagnostic Console Log
       const groundInfo = this.raycastUtils.getDetailedGroundInfo(state.pos.x, -state.pos.y);
       const dist = (state.pos.z - PhysicsSettings.BALL_RADIUS) - groundInfo.height;
       if (this.frameCount % 5 === 0) {
@@ -641,10 +616,8 @@ export class Game {
         }
       }
 
-      // Update ball position and spin roll rotation
       this.ball.updatePosition(state.pos, state.omega, delta);
-      
-      // Update camera follow mode
+
       this.cameraController.update(state.pos, parseFloat(this.uiManager.ui.phi.value), this.time, delta, true);
 
       const speed = this.uiManager.updateHUD(state);
@@ -672,12 +645,11 @@ export class Game {
 
         this.currentBallPos = { x: state.pos.x, y: state.pos.y, z: state.pos.z };
 
-        // perfect aiming angle directly from the ball to the hole
         const dx = TerrainSettings.HOLE_X - this.currentBallPos.x;
         const dy = -this.currentBallPos.y;
         const angleRad = Math.atan2(dy, dx);
         let angleDeg = angleRad * 180 / Math.PI;
-        
+
         if (angleDeg < -180) angleDeg += 360;
         if (angleDeg > 180) angleDeg -= 360;
 
@@ -696,7 +668,7 @@ export class Game {
           this.cameraController.mode = 'hole';
           this.uiManager.updateCamButtons('hole');
           this.uiManager.playSound('hole');
-          
+
           setTimeout(() => {
             this.uiManager.showVictory(this.strokes);
           }, 1500);
@@ -716,13 +688,13 @@ export class Game {
         this.aimLine.visible = false;
       } else {
         this.cameraController.update(this.currentBallPos, parseFloat(this.uiManager.ui.phi.value), this.time, delta, false);
-        
+
         if (this.club.state === 'idle') {
-          // ✅ FIX: Added theta to club positioning and aim line
+
           this.club.updatePositionAndAim(
               this.currentBallPos, 
               parseFloat(this.uiManager.ui.phi.value),
-              parseFloat(this.uiManager.ui.theta.value)  // ✅ ADD theta
+              parseFloat(this.uiManager.ui.theta.value)  
           );
           this.updateAimLine(
               this.currentBallPos, 

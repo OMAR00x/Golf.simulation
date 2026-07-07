@@ -1,6 +1,3 @@
-// ============================================================
-// Tree.js — Tree Entity Class
-// ============================================================
 import * as THREE from 'three';
 
 export class Tree {
@@ -20,8 +17,7 @@ export class Tree {
     }
 
     this.scene.add(this.group);
-    
-    // Align trunk base exactly to the terrain
+
     this.alignToGround(x, z, scale);
   }
 
@@ -60,8 +56,7 @@ export class Tree {
     const bottomY = box.min.y;
 
     const groundY = this.raycastUtils.getGroundHeight(x, z);
-    
-    // Align base to the ground
+
     const yPos = groundY - bottomY;
     this.group.position.set(x, yPos, z);
     this.group.updateMatrixWorld(true);

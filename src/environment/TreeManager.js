@@ -1,6 +1,3 @@
-// ============================================================
-// TreeManager.js — Forest Management & Ground Alignment Class
-// ============================================================
 import { Tree } from '../entities/Tree.js';
 import { TreeSettings } from '../utils/Constants.js';
 
@@ -46,7 +43,7 @@ export class TreeManager {
 
   setModel(treeModel) {
     this.loadedModel = treeModel;
-    this.build(); // Regenerate trees with the professional 3D model
+    this.build(); 
   }
 
   clear() {

@@ -1,6 +1,3 @@
-// ============================================================
-// UIManager.js — User Interface & Audio Synthesizer Class
-// ============================================================
 import { GROUND_INFO } from '../utils/Constants.js';
 
 export class UIManager {
@@ -64,9 +61,6 @@ export class UIManager {
       this.game.resetGame();
     });
 
-
-
-    // camera mode clicks
     [this.ui.camDefault, this.ui.camTop, this.ui.camPlayer, this.ui.camFollow, this.ui.camFree, this.ui.camCinematic].forEach(btn => {
       if (!btn) return;
       btn.addEventListener('click', () => {
@@ -127,8 +121,6 @@ export class UIManager {
     } catch (e) { }
   }
 
-
-
   updateHUD(state) {
     const speed = Math.hypot(state.vel.x, state.vel.y, state.vel.z);
     const spin = Math.hypot(state.omega.x, state.omega.y, state.omega.z);
@@ -157,11 +149,11 @@ export class UIManager {
     const ctrlV0 = document.getElementById('ctrl-v0');
     const ctrlPhi = document.getElementById('ctrl-phi');
     const ctrlSidespin = document.getElementById('ctrl-sidespin');
-    
+
     if (ctrlV0) ctrlV0.classList.toggle('active-param', param === 'power');
     if (ctrlPhi) ctrlPhi.classList.toggle('active-param', param === 'aim');
     if (ctrlSidespin) ctrlSidespin.classList.toggle('active-param', param === 'spin');
-    
+
     const hudVal = document.getElementById('active-param-hud');
     if (hudVal) {
       hudVal.textContent = param === 'power' ? 'Power' : param === 'aim' ? 'Aim' : 'Spin';
@@ -173,7 +165,7 @@ export class UIManager {
     let valLabelEl = null;
     let normalStep = 1.0;
     let fineStep = 0.1;
-    
+
     if (param === 'power') {
       inputEl = this.ui.v0;
       valLabelEl = document.getElementById('v0-val');
@@ -190,20 +182,20 @@ export class UIManager {
       normalStep = 100.0;
       fineStep = 10.0;
     }
-    
+
     if (!inputEl) return;
-    
+
     let step = isFine ? fineStep : normalStep;
     if (shiftPressed) step /= 10;
-    
+
     let val = parseFloat(inputEl.value);
     if (isIncrease) val += step;
     else val -= step;
-    
+
     const min = parseFloat(inputEl.min);
     const max = parseFloat(inputEl.max);
     val = Math.max(min, Math.min(max, val));
-    
+
     inputEl.value = val;
     if (valLabelEl) {
       valLabelEl.textContent = val.toFixed(param === 'spin' ? 0 : 1);

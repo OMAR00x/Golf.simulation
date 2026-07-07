@@ -6,11 +6,6 @@ export class AssetLoader {
     this.cache = {};
   }
 
-  /**
-   * Preload all required GLB models and report progress.
-   * @param {function} onProgress - Callback for progress reporting.
-   * @param {function} onLoad - Callback when all assets are loaded.
-   */
   preload(onProgress, onLoad) {
     const manager = new THREE.LoadingManager();
     manager.onProgress = onProgress;
@@ -32,11 +27,6 @@ export class AssetLoader {
     });
   }
 
-  /**
-   * Get a clone of the cached model for scene instantiation.
-   * @param {string} key - The asset key ('ball', 'tee', 'club').
-   * @returns {THREE.Group|null} A cloned THREE.Group instance or null if not loaded.
-   */
   get(key) {
     const model = this.cache[key];
     if (!model) return null;

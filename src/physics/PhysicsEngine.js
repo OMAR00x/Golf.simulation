@@ -1,6 +1,3 @@
-// ============================================
-// PhysicsEngine.js — Modular Ball Physics Simulation
-// ============================================
 import { PhysicsSettings, TerrainSettings } from '../utils/Constants.js';
 
 export function calcAirDensity(tempC, altitude) {
@@ -12,12 +9,11 @@ export function calcAirDensity(tempC, altitude) {
 function dynamicCd(vel, rho) {
   const speed = Math.hypot(vel.x, vel.y, vel.z);
   if (speed <= 0.1) return 0.47;
-  
+
   const spinRatio = (PhysicsSettings.BALL_RADIUS * 2500 * 0.1047) / speed; 
-  
+
   return 0.22 + 0.40 / (1.0 + speed * 0.1);
 }
-
 
 function liftCoeff(spinRatio) {
   if (spinRatio <= 0) return 0;
@@ -27,14 +23,14 @@ function liftCoeff(spinRatio) {
 function computeAccel(vel, omega, rho, wind) {
   const rv = { x: vel.x - wind.x, y: vel.y - wind.y, z: vel.z - wind.z };
   const speed = Math.hypot(rv.x, rv.y, rv.z);
-  
+
   if (speed <= 0.0001) {
     return { ax: 0, ay: 0, az: -PhysicsSettings.GRAVITY, dOmX: 0, dOmY: 0, dOmZ: 0 };
   }
 
   const Cd = dynamicCd(rv, rho);
   const wMag = Math.hypot(omega.x, omega.y, omega.z);
-  
+
   let Cl = 0;
   if (wMag > 0.1) {
     const spinRatio = (PhysicsSettings.BALL_RADIUS * wMag) / speed;
@@ -46,7 +42,6 @@ function computeAccel(vel, omega, rho, wind) {
   const liftY = Cl * (omega.z * rv.x - omega.x * rv.z) / wMagVal;
   const liftZ = Cl * (omega.x * rv.y - omega.y * rv.x) / wMagVal;
 
-  
   const dragConst = -0.5 * rho * PhysicsSettings.BALL_AREA * speed / PhysicsSettings.BALL_MASS;
   const liftConst = 0.5 * rho * PhysicsSettings.BALL_AREA * speed / PhysicsSettings.BALL_MASS;
 
@@ -54,7 +49,6 @@ function computeAccel(vel, omega, rho, wind) {
   const ay = (dragConst * Cd * rv.y) + (liftConst * liftY);
   const az = -PhysicsSettings.GRAVITY + (dragConst * Cd * rv.z) + (liftConst * liftZ);
 
-  
   const Cm = 0.005;
   const spinDecayK = (rho * PhysicsSettings.BALL_RADIUS * PhysicsSettings.BALL_AREA * Cm * speed) /
                      (2 * PhysicsSettings.INERTIA);
@@ -76,7 +70,6 @@ function rk4Step(state, dt, rho, wind) {
 
   const k1 = deriv(vel, omega);
 
-  
   const v2  = { x: vel.x + .5*dt*k1.ax,   y: vel.y + .5*dt*k1.ay,   z: vel.z + .5*dt*k1.az   };
   const om2 = { x: omega.x+.5*dt*k1.dOmX, y: omega.y+.5*dt*k1.dOmY, z: omega.z+.5*dt*k1.dOmZ };
   const k2  = deriv(v2, om2);
@@ -145,30 +138,27 @@ export class PhysicsEngine {
     this.heightCallback = heightCallback;
     this.rho        = calcAirDensity(params.temperature ?? 20, params.altitude ?? 0);
     this.wind = { x: params.windX ?? 0, y: params.windY ?? 0, z: 0 }
-    
+
     const gt        = PhysicsSettings.GROUND_TYPES[params.groundType] ?? PhysicsSettings.GROUND_TYPES.fairway;
     this.eGround    = gt?.restitution ?? 0.5;
     this.muRolling  = gt?.rollingFriction ?? 0.1;
     this.groundType = params.groundType ?? 'fairway';
-    
+
     this.state      = calcInitialState(params, startPos, clubForward);
     this.trajectory = [{ ...this.state.pos }];
     this.time       = 0;
-    
-    
+
     this.flightTime = 0;
-    
-    
+
     this.apexHeight = this.state.pos.z;
     this.apexDist   = 0;
-    
-    this.phase      = 'flight';   // 'flight' | 'rolling' | 'stopped'
+
+    this.phase      = 'flight';   
     this.inHole     = false;
     this.bounces    = 0;
     this.maxBounces = 8;
     this.landingPoint = null;
   }
-
 
   rollingStepOnSlope(state, dt, groundInfo) {
     const { pos, vel } = state;
@@ -179,11 +169,9 @@ export class PhysicsEngine {
     const g = PhysicsSettings.GRAVITY;
     const mu_r = this.muRolling;
 
-    // 1. Gravity acceleration components along the slope in physics space
     const a_gx = g * normal.z * normal.x;
     const a_gy = g * normal.z * normal.y;
 
-    // 2. Friction deceleration magnitude
     const a_f_mag = mu_r * g * normal.z;
 
     let a_fx = 0;
@@ -194,16 +182,13 @@ export class PhysicsEngine {
       a_fy = -a_f_mag * (vel.y / speed);
     }
 
-    // Combined acceleration
     const ax = a_gx + a_fx;
     const ay = a_gy + a_fy;
 
-    // Update velocity
     let newVx = vel.x + ax * dt;
     let newVy = vel.y + ay * dt;
     let newSpeed = Math.hypot(newVx, newVy);
 
-    // If speed drops to zero and gravity pull is less than static friction, stop the ball
     if (newSpeed < 0.05 && Math.hypot(a_gx, a_gy) <= a_f_mag) {
       return {
         pos: { ...pos, z: groundInfo.height + R },
@@ -212,14 +197,12 @@ export class PhysicsEngine {
       };
     }
 
-    // Update position
     const newPx = pos.x + (vel.x + newVx) * 0.5 * dt;
     const newPy = pos.y + (vel.y + newVy) * 0.5 * dt;
-    
+
     const nextGroundInfo = this.heightCallback ? this.heightCallback(newPx, newPy) : { height: 0, normal: { x: 0, y: 0, z: 1 } };
     const groundH = nextGroundInfo.height;
 
-    // curvature check: launch into air if dropping fast (cliff/mound)
     const groundH_old = groundInfo.height;
     if (groundH < groundH_old - 0.05 && newSpeed > 2.0) {
       this.phase = 'flight';
@@ -230,7 +213,6 @@ export class PhysicsEngine {
       };
     }
 
-    // Roll spin rotation: omega = v / R
     const newOmegaX = newVy / R;
     const newOmegaY = -newVx / R;
     const newOmegaZ = 0;
@@ -246,51 +228,43 @@ export class PhysicsEngine {
     if (this.phase === 'stopped') return;
 
     const R = PhysicsSettings.BALL_RADIUS;
-    
-    // Query visual ground information at current position
+
     const groundInfo = this.heightCallback ? this.heightCallback(this.state.pos.x, this.state.pos.y) : { height: 0, normal: { x: 0, y: 0, z: 1 }, meshName: 'Default' };
     const groundH = groundInfo.height;
     const normal = groundInfo.normal;
 
     if (this.phase === 'flight') {
       const nextState = rk4Step(this.state, dt, this.rho, this.wind);
-      
-      
+
       if (nextState.pos.z > this.apexHeight) {
         this.apexHeight = nextState.pos.z;
         this.apexDist = Math.hypot(nextState.pos.x, nextState.pos.y);
       }
-      
-      
+
       this.flightTime += dt;
-      
-      // Get actual terrain height at the next ball coordinate
+
       const nextGroundInfo = this.heightCallback ? this.heightCallback(nextState.pos.x, nextState.pos.y) : { height: 0, normal: { x: 0, y: 0, z: 1 }, meshName: 'Default' };
       const nextGroundH = nextGroundInfo.height;
-      
-      // Collision detection with actual visual terrain surface!
+
       if (nextState.pos.z <= nextGroundH + R) {
         this.bounces++;
-        
+
         const impactNormal = nextGroundInfo.normal;
-        
+
         if (!this.landingPoint) {
           this.landingPoint = { ...nextState.pos };
         }
 
-        // Project velocity onto sloped normal from the mesh face
         const vn = this.state.vel.x * impactNormal.x + this.state.vel.y * impactNormal.y + this.state.vel.z * impactNormal.z;
 
         if (vn < 0) {
-          // Bounce normal component
+
           const vn_after = -this.eGround * vn;
 
-          // Tangential velocity vector
           const vt_x = this.state.vel.x - vn * impactNormal.x;
           const vt_y = this.state.vel.y - vn * impactNormal.y;
           const vt_z = this.state.vel.z - vn * impactNormal.z;
 
-          // Tangential friction damping based on grass type
           const frictionLoss = this.groundType === 'rough' ? 0.35 : 
                                this.groundType === 'green' ? 0.08 : 0.16;
 
@@ -298,39 +272,35 @@ export class PhysicsEngine {
           const vt_after_y = vt_y * (1 - frictionLoss);
           const vt_after_z = vt_z * (1 - frictionLoss);
 
-          // Combined velocity vector
           this.state.vel = {
             x: vt_after_x + vn_after * impactNormal.x,
             y: vt_after_y + vn_after * impactNormal.y,
             z: vt_after_z + vn_after * impactNormal.z
           };
 
-          // Anti-penetration clamp: place ball base touching terrain
           this.state.pos = {
             x: nextState.pos.x,
             y: nextState.pos.y,
             z: nextGroundH + R + 0.01
           };
 
-          // Spin decay on bounce
           this.state.omega = {
             x: this.state.omega.x * 0.5,
             y: this.state.omega.y * 0.5,
             z: this.state.omega.z * 0.5
           };
 
-          // Transition to rolling on low vertical velocity
           if (Math.abs(vn) < 0.65 || this.bounces >= this.maxBounces) {
             this.phase = 'rolling';
             this.state.pos.z = nextGroundH + R ;
             this.state.vel.z = 0;
           }
         } else {
-          // Moving away, no bounce
+
           this.state = nextState;
         }
       } else {
-        // Clear air, proceed flight
+
         this.state = nextState;
       }
 
@@ -353,7 +323,6 @@ export class PhysicsEngine {
       this.trajectory.push({ ...this.state.pos });
     }
 
-    // Check hole entry
     if (!this.inHole) {
       const dx = this.state.pos.x - TerrainSettings.HOLE_X;
       const dy = this.state.pos.y - (TerrainSettings.HOLE_Y ?? 0);
@@ -365,7 +334,6 @@ export class PhysicsEngine {
       }
     }
 
-    // Boundary enforcement (Invisible bounds around play area)
     const minX = -680;
     const maxX = 1680;
     const minY = -78;
@@ -395,7 +363,7 @@ export class PhysicsEngine {
   getStats() {
     const last  = this.trajectory[this.trajectory.length - 1];
     const groundInfo = this.heightCallback ? this.heightCallback(last.x, last.y) : { height: 0 };
-    
+
     return {
       distance:  Math.hypot(last.x, last.y).toFixed(1),
       maxHeight: (this.apexHeight - PhysicsSettings.BALL_RADIUS).toFixed(1),

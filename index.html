@@ -8,7 +8,7 @@
   <script type="importmap">
   {
     "imports": {
-      
+
       "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
       "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
     }
@@ -102,7 +102,6 @@
     #ground-label { font-size: 11px; font-weight: bold; margin-bottom: 3px; }
     #ground-desc  { font-size: 10px; color: #888; line-height: 1.5; }
 
-    /* ══ أزرار الكاميرا ══ */
     #cam-btns {
       position: fixed; bottom: 12px; left: 12px; z-index: 10;
       display: flex;
@@ -212,7 +211,6 @@
     }
     #info-bar span { color: #52b788; margin: 0 4px; }
 
-    /* ══ Loader Overlay ══ */
     #loading-overlay {
       position: fixed;
       inset: 0;
@@ -277,7 +275,7 @@
     @keyframes spin {
       to { transform: rotate(360deg); }
     }
-    
+
     #victory-overlay {
       position: fixed;
       left: 50%;
@@ -354,7 +352,6 @@
 </head>
 <body>
 
-<!-- Loader Overlay -->
 <div id="loading-overlay">
   <div class="loader-content">
     <div class="loader-spinner"></div>
@@ -366,10 +363,8 @@
   </div>
 </div>
 
-<!-- 3D Canvas -->
 <div id="canvas-container"></div>
 
-<!-- Input Control Panel -->
 <div id="ui-panel">
   <h3>Golf Physics Simulator</h3>
   <div id="active-param-indicator" style="text-align: center; font-size: 11px; margin-bottom: 8px; color: #aaa;">
@@ -472,7 +467,6 @@
   </div>
 </div>
 
-<!-- Telemetry HUD -->
 <div id="hud">
   <h4>Real-time Telemetry</h4>
   <div class="hud-row"><span>Altitude</span>   <span class="val" id="dash-alt">0.00</span><span style="color:#666;font-size:10px"> m</span></div>
@@ -491,7 +485,6 @@
   </div>
 </div>
 
-<!-- Camera Controls -->
 <div id="cam-btns">
   <div class="cam-label">Camera Mode</div>
   <div class="cam-group">
@@ -506,15 +499,11 @@
   <div class="cam-hint">WASD+QE: Move | Shift: Fast | Wheel: Zoom</div>
 </div>
 
-<!-- Keyboard Shortcuts Info -->
 <div id="hint">
   Mouse Drag: Rotate &nbsp;|&nbsp; Mouse Wheel: Zoom<br>
   Keyboard WASD+QE: Move | Shift: Fast
 </div>
 
-
-
-<!-- Final Stats Panel -->
 <div id="stats-panel">
   <h3>Simulation Results</h3>
   <div class="stat-row"><span>Total Distance</span>  <span class="sv" id="stat-dist">—</span></div>
@@ -527,7 +516,6 @@
   <button class="close-btn" onclick="document.getElementById('stats-panel').style.display='none'">Close</button>
 </div>
 
-<!-- Victory Scorecard Modal -->
 <div id="victory-overlay">
   <div class="victory-card">
     <div class="cup-icon">
