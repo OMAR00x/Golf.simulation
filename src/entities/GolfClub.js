@@ -1,5 +1,5 @@
 // ============================================================
-// GolfClub.js — Golf Club Entity Class
+// GolfClub.js — Golf Club Entity Class (FIXED)
 // ============================================================
 import * as THREE from 'three';
 import { PhysicsSettings } from '../utils/Constants.js';
@@ -117,12 +117,14 @@ export class GolfClub {
     this.clubPivot.rotation.z = zRot;
   }
 
-  updatePositionAndAim(pos, phiDeg) {
+  // ✅ FIX: Added thetaDeg parameter to tilt the club vertically
+  updatePositionAndAim(pos, phiDeg, thetaDeg) {
     this.group.visible = true;
 
     const R = PhysicsSettings.BALL_RADIUS * 5; // Visual ball radius
     const targetDistance = R + this.clubMaxX;
     const phiRad = (phiDeg !== undefined ? phiDeg : 0) * Math.PI / 180;
+    const thetaRad = (thetaDeg !== undefined ? thetaDeg : 15) * Math.PI / 180;
 
     const ballX = pos.x;
     const ballY = pos.z - PhysicsSettings.BALL_RADIUS;
@@ -133,16 +135,25 @@ export class GolfClub {
 
     this.group.position.set(targetClubX, ballY, targetClubZ);
     this.group.rotation.set(0, phiRad, 0);
+    
+    // ✅ FIX: Tilt the club back to match theta (vertical launch angle)
+    this.clubPivot.rotation.x = -thetaRad;
+    
     this.group.updateMatrixWorld(true);
   }
 
+  // ✅ FIX: Calculate direction directly from theta and phi
   getClubForwardVector(thetaDeg) {
+    const phiRad = this.group.rotation.y;
     const thetaRad = (thetaDeg !== undefined ? thetaDeg : 15) * Math.PI / 180;
-    const localForward = new THREE.Vector3(Math.cos(thetaRad), Math.sin(thetaRad), 0);
     
-    this.clubPivot.updateMatrixWorld(true);
-    const worldForward = localForward.transformDirection(this.clubPivot.matrixWorld);
-    return worldForward;
+    // Calculate direction directly from theta and phi
+    // This matches the physics engine coordinate system exactly
+    return new THREE.Vector3(
+        Math.cos(thetaRad) * Math.cos(phiRad),   // physics x
+        Math.sin(thetaRad),                        // physics z (up)
+        -Math.cos(thetaRad) * Math.sin(phiRad)     // physics y (cross)
+    );
   }
 
   dispose() {

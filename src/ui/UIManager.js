@@ -221,6 +221,7 @@ export class UIManager {
       sidespinRPM: parseFloat(this.ui.sidespin.value),
       temperature: parseFloat(this.ui.temperature.value),
       altitude: parseFloat(this.ui.altitude.value),
+      crosswindWs: parseFloat(this.ui.windX.value),
       windX: parseFloat(this.ui.windX.value),
       windY: 0,
       groundType: this.ui.groundType.value,

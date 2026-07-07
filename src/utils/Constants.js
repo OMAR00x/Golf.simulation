@@ -1,13 +1,13 @@
-// ============================================================
-// Constants.js — Application Configuration Settings
-// ============================================================
-
 export const PhysicsSettings = {
-  GRAVITY:          9.81,                                             // g (m/s²)
+  GRAVITY:          -9.81,                                             // g (m/s²)
   BALL_MASS:        0.04593,                                          // m (kg)
   BALL_RADIUS:      0.02135,                                          // R (m)
-  BALL_AREA:        Math.PI * 0.02135 ** 2,                           // A = pi * R² (m²)
-  INERTIA:          (2 / 5) * 0.04593 * 0.02135 ** 2,                 // I = (2/5)*m*R² (kg*m²)
+ get BALL_AREA() {
+    return Math.PI * this.BALL_RADIUS * this.BALL_RADIUS;
+  },
+   get INERTIA() {
+    return (2 / 5) * this.BALL_MASS * this.BALL_RADIUS * this.BALL_RADIUS;
+  },
   TIME_STEP:        0.001,                                            // h (s) - RK4 step size
   MAX_TIME:         20,                                               // Maximum simulation time (s)
   KINETIC_FRICTION: 0.20,                                             // mu_k (dynamic friction during bounce)

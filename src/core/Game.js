@@ -1,5 +1,5 @@
 // ============================================================
-// Game.js — Main OOP Application Loop & Coordination Class
+// Game.js — Main OOP Application Loop & Coordination Class (FIXED)
 // ============================================================
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
@@ -410,6 +410,7 @@ export class Game {
     );
   }
 
+  // ✅ FIX: Added theta to club positioning
   resetGame() {
     this.running = false;
     this.engine = null;
@@ -419,7 +420,11 @@ export class Game {
 
     this.uiManager.setStrokesHUD(0);
     this.ball.reset();
-    this.club.updatePositionAndAim(this.currentBallPos, parseFloat(this.uiManager.ui.phi.value));
+    this.club.updatePositionAndAim(
+        this.currentBallPos, 
+        parseFloat(this.uiManager.ui.phi.value),
+        parseFloat(this.uiManager.ui.theta.value)  // ✅ ADD theta
+    );
     
     if (this.teeBall) {
       this.teeBall.visible = true;
@@ -445,26 +450,39 @@ export class Game {
     this.uiManager.updateCamButtons(mode);
   }
 
+  // ✅ FIX: Added theta to club positioning and aim line update
   onParamAdjust(param, val) {
     if (!this.running && !this.holeComplete) {
       if (param === 'aim') {
-        this.club.updatePositionAndAim(this.currentBallPos, val);
-        this.updateAimLine(this.currentBallPos, val, parseFloat(this.uiManager.ui.theta.value));
+        this.club.updatePositionAndAim(
+            this.currentBallPos, 
+            val,
+            parseFloat(this.uiManager.ui.theta.value)  // ✅ ADD theta
+        );
       }
+      // ✅ FIX: Update aim line for ANY parameter change
+      this.updateAimLine(
+        this.currentBallPos, 
+        parseFloat(this.uiManager.ui.phi.value), 
+        parseFloat(this.uiManager.ui.theta.value)
+      );
     }
   }
 
+  // ✅ FIX: Calculate direction directly from input angles, NOT from club mesh
   updateAimLine(pos, phiDeg, thetaDeg) {
     if (!this.aimLine) return;
     const R = PhysicsSettings.BALL_RADIUS * 5;
     const ballVec = new THREE.Vector3(pos.x, pos.z - PhysicsSettings.BALL_RADIUS + R, -pos.y);
     this.aimLine.position.copy(ballVec);
 
-    const clubDir = this.club.getClubForwardVector(thetaDeg);
+    // Calculate direction directly from input angles
+    const thetaR = thetaDeg * Math.PI / 180;
+    const phiR = phiDeg * Math.PI / 180;
     const length = 15;
-    const dx = length * clubDir.x;
-    const dy = length * clubDir.y;
-    const dz = length * clubDir.z;
+    const dx = length * Math.cos(thetaR) * Math.cos(phiR);
+    const dy = length * Math.sin(thetaR);
+    const dz = length * Math.cos(thetaR) * Math.sin(phiR);
 
     const points = [
       new THREE.Vector3(0, 0, 0),
@@ -639,8 +657,6 @@ export class Game {
         this.updateLandingMarker(this.engine.landingPoint);
       }
 
-
-
       if (this.engine.bounces > this.lastBounceCount) {
         this.uiManager.playSound('bounce');
         this.createBounceParticles(state.pos, Math.min(1, speed / 20));
@@ -702,8 +718,17 @@ export class Game {
         this.cameraController.update(this.currentBallPos, parseFloat(this.uiManager.ui.phi.value), this.time, delta, false);
         
         if (this.club.state === 'idle') {
-          this.club.updatePositionAndAim(this.currentBallPos, parseFloat(this.uiManager.ui.phi.value));
-          this.updateAimLine(this.currentBallPos, parseFloat(this.uiManager.ui.phi.value), parseFloat(this.uiManager.ui.theta.value));
+          // ✅ FIX: Added theta to club positioning and aim line
+          this.club.updatePositionAndAim(
+              this.currentBallPos, 
+              parseFloat(this.uiManager.ui.phi.value),
+              parseFloat(this.uiManager.ui.theta.value)  // ✅ ADD theta
+          );
+          this.updateAimLine(
+              this.currentBallPos, 
+              parseFloat(this.uiManager.ui.phi.value), 
+              parseFloat(this.uiManager.ui.theta.value)
+          );
         }
       }
     }

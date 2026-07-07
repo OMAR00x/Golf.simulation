@@ -3,21 +3,12 @@
 // ============================================================
 import { PhysicsSettings, TerrainSettings } from '../utils/Constants.js';
 
-/**
- * Calculates air density based on temperature and altitude.
- * @param {number} tempC - Temperature in degrees Celsius.
- * @param {number} altitude - Altitude in meters.
- * @returns {number} Air density in kg/m^3.
- */
 export function calcAirDensity(tempC, altitude) {
   const T0 = 288.15;
   const T  = tempC + 273.15;
   return 1.225 * (T0 / T) * Math.exp(-0.000118 * altitude);
 }
 
-/**
- * Calculates the dynamic drag coefficient of a dimpled golf ball.
- */
 function dynamicCd(vel, rho) {
   const speed = Math.hypot(vel.x, vel.y, vel.z);
   const Re    = (rho * speed * 2 * PhysicsSettings.BALL_RADIUS) / 1.81e-5;
@@ -26,20 +17,16 @@ function dynamicCd(vel, rho) {
   return 0.22;
 }
 
-/**
- * Calculates the lift coefficient from the spin ratio.
- */
 function liftCoeff(spinRatio) {
   if (spinRatio < 0.05) return 0;
   if (spinRatio > 0.50) return 0.30;
   const peak = 0.25;
-  if (spinRatio < peak) return 0.60 * spinRatio;
+  if (spinRatio < peak) {
+    return 0.80 * spinRatio;
+  }
   return 0.15 + 0.30 * Math.exp(-(spinRatio - peak) * 3);
 }
 
-/**
- * Computes the total linear acceleration and spin decay derivatives.
- */
 function computeAccel(vel, omega, rho, wind) {
   const rv = { x: vel.x - wind.x, y: vel.y - wind.y, z: vel.z - wind.z };
   const speed = Math.hypot(rv.x, rv.y, rv.z);
@@ -62,11 +49,16 @@ function computeAccel(vel, omega, rho, wind) {
   const liftY = Cl * (omega.z * rv.x - omega.x * rv.z) / wMagVal;
   const liftZ = Cl * (omega.x * rv.y - omega.y * rv.x) / wMagVal;
 
-  const k = -0.5 * rho * PhysicsSettings.BALL_AREA * speed / PhysicsSettings.BALL_MASS;
 
-  const ax = k * (Cd * rv.x - liftX);
-  const ay = k * (Cd * rv.y - liftY);
-  const az = -PhysicsSettings.GRAVITY + k * (Cd * rv.z - liftZ);
+const dragConst = -0.5 * rho * PhysicsSettings.BALL_AREA * speed / PhysicsSettings.BALL_MASS;
+
+
+const liftConst = 0.5 * rho * PhysicsSettings.BALL_AREA * speed / PhysicsSettings.BALL_MASS;
+
+
+const ax = (dragConst * Cd * rv.x) + (liftConst * liftX);
+const ay = (dragConst * Cd * rv.y) + (liftConst * liftY);
+const az = -PhysicsSettings.GRAVITY + (dragConst * Cd * rv.z) + (liftConst * liftZ);
 
   const Cm = 0.005;
   const spinDecayK = (rho * PhysicsSettings.BALL_RADIUS * PhysicsSettings.BALL_AREA * Cm * speed) /
@@ -78,9 +70,6 @@ function computeAccel(vel, omega, rho, wind) {
   return { ax, ay, az, dOmX, dOmY, dOmZ };
 }
 
-/**
- * Performs a single Runge-Kutta 4th-order integration step.
- */
 function rk4Step(state, dt, rho, wind) {
   const { pos, vel, omega } = state;
 
@@ -92,7 +81,8 @@ function rk4Step(state, dt, rho, wind) {
 
   const k1 = deriv(vel, omega);
 
-  const v2  = { x: vel.x + .5*dt*k1.ax,   y: vel.y + .5*dt*k1.az,   z: vel.z + .5*dt*k1.az   };
+  
+  const v2  = { x: vel.x + .5*dt*k1.ax,   y: vel.y + .5*dt*k1.ay,   z: vel.z + .5*dt*k1.az   };
   const om2 = { x: omega.x+.5*dt*k1.dOmX, y: omega.y+.5*dt*k1.dOmY, z: omega.z+.5*dt*k1.dOmZ };
   const k2  = deriv(v2, om2);
 
@@ -124,9 +114,6 @@ function rk4Step(state, dt, rho, wind) {
   };
 }
 
-/**
- * Computes the initial launch state vector based on player shot options.
- */
 export function calcInitialState(p, startPos, clubForward) {
   const { v0, thetaDeg, phiDeg, backspinRPM, sidespinRPM } = p;
   const bs     = (backspinRPM  * 2 * Math.PI) / 60;
@@ -162,7 +149,7 @@ export class PhysicsEngine {
     this.p          = params;
     this.heightCallback = heightCallback;
     this.rho        = calcAirDensity(params.temperature ?? 20, params.altitude ?? 0);
-    this.wind       = { x: params.windX ?? 0, y: params.windY ?? 0, z: 0 };
+    this.wind = { x: 0, y: params.windX ?? 0, z: 0 }
     
     const gt        = PhysicsSettings.GROUND_TYPES[params.groundType] ?? PhysicsSettings.GROUND_TYPES.fairway;
     this.eGround    = gt.restitution;
@@ -172,6 +159,14 @@ export class PhysicsEngine {
     this.state      = calcInitialState(params, startPos, clubForward);
     this.trajectory = [{ ...this.state.pos }];
     this.time       = 0;
+    
+    
+    this.flightTime = 0;
+    
+    
+    this.apexHeight = this.state.pos.z;
+    this.apexDist   = 0;
+    
     this.phase      = 'flight';   // 'flight' | 'rolling' | 'stopped'
     this.inHole     = false;
     this.bounces    = 0;
@@ -179,9 +174,7 @@ export class PhysicsEngine {
     this.landingPoint = null;
   }
 
-  /**
-   * Advances the rolling state of the ball, factoring in slope vectors and friction.
-   */
+
   rollingStepOnSlope(state, dt, groundInfo) {
     const { pos, vel } = state;
     const speed = Math.hypot(vel.x, vel.y);
@@ -254,9 +247,6 @@ export class PhysicsEngine {
     };
   }
 
-  /**
-   * Advances the ball physics state by a single time step.
-   */
   step(dt) {
     if (this.phase === 'stopped') return;
 
@@ -270,6 +260,15 @@ export class PhysicsEngine {
     if (this.phase === 'flight') {
       const nextState = rk4Step(this.state, dt, this.rho, this.wind);
       
+      
+      if (nextState.pos.z > this.apexHeight) {
+        this.apexHeight = nextState.pos.z;
+        this.apexDist = Math.hypot(nextState.pos.x, nextState.pos.y);
+      }
+      
+      
+      this.flightTime += dt;
+      
       // Get actual terrain height at the next ball coordinate
       const nextGroundInfo = this.heightCallback ? this.heightCallback(nextState.pos.x, nextState.pos.y) : { height: 0, normal: { x: 0, y: 0, z: 1 }, meshName: 'Default' };
       const nextGroundH = nextGroundInfo.height;
@@ -277,7 +276,9 @@ export class PhysicsEngine {
       // Collision detection with actual visual terrain surface!
       if (nextState.pos.z <= nextGroundH + R) {
         this.bounces++;
-        if (!this.landingPoint && this.bounces === 1) {
+        
+        
+        if (!this.landingPoint) {
           this.landingPoint = { ...nextState.pos };
         }
 
@@ -312,7 +313,7 @@ export class PhysicsEngine {
           this.state.pos = {
             x: nextState.pos.x,
             y: nextState.pos.y,
-            z: nextGroundH + R + 0.002
+            z: nextGroundH + R + 0.01
           };
 
           // Spin decay on bounce
@@ -325,7 +326,7 @@ export class PhysicsEngine {
           // Transition to rolling on low vertical velocity
           if (Math.abs(vn) < 0.65 || this.bounces >= this.maxBounces) {
             this.phase = 'rolling';
-            this.state.pos.z = nextGroundH + R;
+            this.state.pos.z = nextGroundH + R ;
             this.state.vel.z = 0;
           }
         } else {
@@ -383,9 +384,6 @@ export class PhysicsEngine {
     }
   }
 
-  /**
-   * Advances the simulation using substeps.
-   */
   update(deltaTime) {
     if (this.phase === 'stopped') return;
     const dt      = PhysicsSettings.TIME_STEP;
@@ -398,24 +396,16 @@ export class PhysicsEngine {
     }
   }
 
-  /**
-   * Returns telemetry stats for display panel.
-   */
   getStats() {
-    let maxH = 0, apexDist = 0;
-    for (const p of this.trajectory) {
-      if (p.z > maxH) {
-        maxH = p.z;
-        apexDist = Math.hypot(p.x, p.y);
-      }
-    }
     const last  = this.trajectory[this.trajectory.length - 1];
     const groundInfo = this.heightCallback ? this.heightCallback(last.x, last.y) : { height: 0 };
+    
     return {
       distance:  Math.hypot(last.x, last.y).toFixed(1),
-      maxHeight: (maxH - groundInfo.height).toFixed(1),
-      apexDist:  apexDist.toFixed(1),
-      flightTime:this.time.toFixed(2),
+      maxHeight: (this.apexHeight - PhysicsSettings.BALL_RADIUS).toFixed(1),
+      apexDist:  this.apexDist.toFixed(1),
+      flightTime: this.flightTime.toFixed(2),
+      totalTime:  this.time.toFixed(2),
       inHole:    this.inHole,
       landingX:  this.landingPoint ? this.landingPoint.x.toFixed(1) : null,
       landingY:  this.landingPoint ? this.landingPoint.y.toFixed(1) : null,
