@@ -121,7 +121,7 @@ export function calcInitialState(p, startPos, clubForward) {
     const thetaR = thetaDeg * Math.PI / 180;
     const phiR   = phiDeg   * Math.PI / 180;
     vx = v0 * Math.cos(thetaR) * Math.cos(phiR);
-    vy = -v0 * Math.cos(thetaR) * Math.sin(phiR);
+    vy = v0 * Math.cos(thetaR) * Math.sin(phiR);
     vz = v0 * Math.sin(thetaR);
   }
 

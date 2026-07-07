@@ -462,7 +462,7 @@ export class Game {
     const length = 15;
     const dx = length * Math.cos(thetaR) * Math.cos(phiR);
     const dy = length * Math.sin(thetaR);
-    const dz = length * Math.cos(thetaR) * Math.sin(phiR);
+    const dz = -length * Math.cos(thetaR) * Math.sin(phiR);
 
     const points = [
       new THREE.Vector3(0, 0, 0),
