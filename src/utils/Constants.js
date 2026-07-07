@@ -1,5 +1,5 @@
 export const PhysicsSettings = {
-  GRAVITY:          -9.81,                                             // g (m/s²)
+  GRAVITY:          9.81,                                             // g (m/s²)
   BALL_MASS:        0.04593,                                          // m (kg)
   BALL_RADIUS:      0.02135,                                          // R (m)
  get BALL_AREA() {
